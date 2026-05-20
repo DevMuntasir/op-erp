@@ -1,0 +1,17 @@
+{
+  "name": "OP Media Management",
+  "short_name": "OP Media",
+  "description": "Professional Media Management and Task Tracking",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#09090b",
+  "theme_color": "#09090b",
+  "icons": [
+    {
+      "src": "/src/assets/images/app_icon_1778133638865.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

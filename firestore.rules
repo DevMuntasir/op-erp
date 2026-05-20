@@ -1,0 +1,331 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if isDeveloper();
+    }
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return isSignedIn();
+    }
+
+    function authEmail() {
+      return isSignedIn() ? request.auth.token.get('email', '').lower() : '';
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isDeveloper() {
+      return isSignedIn() && authEmail() == "wpnajmul@gmail.com".lower();
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128;
+    }
+
+    function matchesUser(val) {
+      return val != null && val != "" && (
+        val == request.auth.uid || 
+        val.lower() == request.auth.uid.lower() || 
+        (authEmail() != "" && val.lower() == authEmail())
+      );
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && (userId == request.auth.uid || matchesUser(userId));
+    }
+
+    function isAdminRole() {
+      return isSignedIn() && (
+        isDeveloper() ||
+        (exists(/databases/$(database)/documents/profiles/$(request.auth.uid)) && get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.get('role', '') in ['admin', 'super_admin'])
+      );
+    }
+
+    function isSuperAdminRole() {
+      return isSignedIn() && (
+        isDeveloper() ||
+        (exists(/databases/$(database)/documents/profiles/$(request.auth.uid)) && get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.get('role', '') == 'super_admin')
+      );
+    }
+
+    function hasRole(role) {
+      return isSignedIn() && (
+        isDeveloper() ||
+        (exists(/databases/$(database)/documents/profiles/$(request.auth.uid)) && get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.get('role', '') == role)
+      );
+    }
+
+    function getMyAdminId() {
+      return isSignedIn() ? (
+        exists(/databases/$(database)/documents/profiles/$(request.auth.uid)) 
+          ? get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.get('adminId', request.auth.uid) 
+          : request.auth.uid
+      ) : request.auth.uid;
+    }
+
+    // ===============================================================
+    // Entity Validations
+    // ===============================================================
+
+    function isValidUser(data, userId) {
+      return data.get('email', '') is string && 
+             data.get('role', 'employee') in ['super_admin', 'admin', 'employee', 'client'];
+    }
+
+    // ===============================================================
+    // Match Rules
+    // ===============================================================
+
+    match /_healthcheck/{docId} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && (isOwner(userId) || isAdminRole());
+    }
+
+    match /profiles/{userId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && (isOwner(userId) || isAdminRole());
+    }
+
+    match /tasks/{taskId} {
+      function isAssignee() {
+        return matchesUser(existing().get('assignedTo', ''));
+      }
+
+      function isRecipient() {
+         return (authEmail() != "" && existing().get('clientEmail', '').lower() == authEmail()) ||
+                (authEmail() == "" && isSignedIn() && exists(/databases/$(database)/documents/profiles/$(request.auth.uid)) &&
+                 get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.get('email', '').lower() == existing().get('clientEmail', '').lower());
+      }
+
+      allow get: if isVerified() && (isAdminRole() || isAssignee() || isRecipient());
+      allow list: if isVerified() && (
+        isAdminRole() || 
+        isDeveloper() || 
+        (resource.data.get('adminId', null) != null && (resource.data.adminId == request.auth.uid || resource.data.adminId == getMyAdminId())) ||
+        isAssignee() || 
+        isRecipient()
+      );
+      allow create: if isAdminRole() && incoming().get('adminId', '') == request.auth.uid && isValidId(taskId);
+      allow update: if isVerified() && (
+        (isAdminRole() && (existing().get('adminId', '') == request.auth.uid || isDeveloper())) ||
+        (isAssignee() && (
+          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'submission', 'submittedAt', 'updatedAt', 'title', 'description']) ||
+          (incoming().diff(existing()).affectedKeys().hasOnly(['assignedTo', 'assignedToEmail', 'updatedAt']) && incoming().get('assignedTo', '') == request.auth.uid)
+        ))
+      );
+      allow delete: if isAdminRole() && (existing().get('adminId', '') == request.auth.uid || isDeveloper());
+
+      match /messages/{messageId} {
+        allow read: if isVerified() && (isAdminRole() || isAssignee() || isRecipient());
+        allow create: if isVerified() && isOwner(incoming().get('senderId', '')) && isValidId(messageId);
+      }
+    }
+
+    match /sessions/{sessionId} {
+      allow read: if isVerified() && (isAdminRole() || isOwner(existing().get('userId', '')));
+      allow create: if isVerified() && isOwner(incoming().get('userId', '')) && isValidId(sessionId);
+      allow update: if isVerified() && isOwner(existing().get('userId', '')) && 
+                    incoming().diff(existing()).affectedKeys().hasOnly(['endTime', 'activeTime', 'status']);
+      allow delete: if isAdminRole();
+    }
+
+    match /projects/{projectId} {
+      allow read: if isVerified() && (isAdminRole() || existing().get('adminId', '') == getMyAdminId());
+      allow create: if isAdminRole() && incoming().get('adminId', '') == request.auth.uid && isValidId(projectId);
+      allow update: if isAdminRole();
+      allow delete: if isAdminRole();
+    }
+
+    match /clients/{clientId} {
+      function isClientOwner() {
+        return (authEmail() != "" && existing().get('email', '').lower() == authEmail()) ||
+               (authEmail() == "" && isSignedIn() && exists(/databases/$(database)/documents/profiles/$(request.auth.uid)) &&
+                get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.get('email', '').lower() == existing().get('email', '').lower());
+      }
+
+      function canReadClient() {
+        return isSuperAdminRole() || 
+               (isAdminRole() && existing().get('adminId', '') == request.auth.uid) ||
+               (hasRole('employee') && (existing().get('createdBy', '') == request.auth.uid || (existing().get('assignedEmployees', []) != null && request.auth.uid in existing().get('assignedEmployees', [])))) ||
+               isClientOwner();
+      }
+
+      allow get: if isVerified() && canReadClient();
+      allow list: if isVerified() && (
+        isSuperAdminRole() ||
+        (isAdminRole() && resource.data.get('adminId', '') == request.auth.uid) ||
+        (hasRole('employee') && (resource.data.get('createdBy', '') == request.auth.uid || (resource.data.get('assignedEmployees', []) != null && request.auth.uid in resource.data.get('assignedEmployees', [])))) ||
+        isClientOwner()
+      );
+      allow create: if isVerified() && (isAdminRole() || hasRole('employee')) && isValidId(clientId);
+      allow update: if isVerified() && (
+        isSuperAdminRole() ||
+        (isAdminRole() && existing().get('adminId', '') == request.auth.uid) ||
+        (hasRole('employee') && (existing().get('createdBy', '') == request.auth.uid || (existing().get('assignedEmployees', []) != null && request.auth.uid in existing().get('assignedEmployees', []))))
+      );
+      allow delete: if isAdminRole();
+    }
+
+    match /screenshots/{screenshotId} {
+      allow get: if isVerified() && (isAdminRole() || isOwner(existing().get('userId', '')) || (exists(/databases/$(database)/documents/profiles/$(existing().get('userId', ''))) && get(/databases/$(database)/documents/profiles/$(existing().get('userId', ''))).data.get('adminId', '') == getMyAdminId()));
+      allow list: if isVerified() && (
+        isAdminRole() || 
+        resource.data.get('userId', '') == request.auth.uid || 
+        resource.data.get('adminId', '') == request.auth.uid || 
+        resource.data.get('adminId', '') == getMyAdminId()
+      );
+      allow create: if isVerified() && isOwner(incoming().get('userId', '')) && isValidId(screenshotId);
+      allow delete: if isAdminRole();
+    }
+
+    match /messages/{messageId} {
+      function isParticipant(participants) {
+        return participants != null && (
+          request.auth.uid in participants || 
+          authEmail() in participants
+        );
+      }
+
+      allow read: if isVerified() && (isAdminRole() || isParticipant(existing().get('participants', [])) || (existing().get('adminId', null) != null && existing().adminId == getMyAdminId()));
+      allow create: if isVerified() && isValidId(messageId);
+      allow update: if isVerified() && isParticipant(existing().get('participants', [])) && (
+        incoming().diff(existing()).affectedKeys().hasOnly(['status', 'seenAt', 'updatedAt']) ||
+        (incoming().diff(existing()).affectedKeys().hasAny(['participants', 'senderId']) && isParticipant(incoming().get('participants', [])))
+      );
+    }
+
+    match /calls/{callId} {
+      allow get: if isVerified() && (isAdminRole() || isOwner(existing().get('employeeId', '')) || existing().get('adminId', '') == getMyAdminId());
+      allow list: if isVerified() && (isAdminRole() || isOwner(existing().get('employeeId', '')) || existing().get('adminId', '') == getMyAdminId());
+      allow create: if isVerified() && (isOwner(incoming().get('employeeId', '')) || isAdminRole()) && isValidId(callId);
+      allow update: if isVerified() && (
+        (isAdminRole() && (existing().get('adminId', '') == request.auth.uid || isDeveloper())) ||
+        (isOwner(existing().get('employeeId', '')) && incoming().diff(existing()).affectedKeys().hasOnly(['notes', 'status', 'duration', 'type', 'updatedAt']))
+      );
+      allow delete: if isAdminRole();
+    }
+    
+    match /leads/{leadId} {
+       function canReadLead() {
+         return isSuperAdminRole() ||
+                (isAdminRole() && existing().get('adminId', '') == request.auth.uid) ||
+                (hasRole('employee') && existing().get('createdBy', '') == request.auth.uid);
+       }
+
+       allow get: if isVerified() && canReadLead();
+       allow list: if isVerified() && (
+         isSuperAdminRole() ||
+         (isAdminRole() && resource.data.get('adminId', '') == request.auth.uid) ||
+         (hasRole('employee') && resource.data.get('createdBy', '') == request.auth.uid)
+       );
+       allow create: if isVerified() && (isAdminRole() || hasRole('employee')) && isValidId(leadId);
+       allow update: if isVerified() && (
+         isSuperAdminRole() ||
+         (isAdminRole() && existing().get('adminId', '') == request.auth.uid) ||
+         (hasRole('employee') && existing().get('createdBy', '') == request.auth.uid)
+       );
+       allow delete: if isAdminRole();
+    }
+
+    match /proposals/{proposalId} {
+      function canReadProposal() {
+        return isSuperAdminRole() ||
+               (isAdminRole() && existing().get('adminId', '') == request.auth.uid) ||
+               (hasRole('employee') && existing().get('createdBy', '') == request.auth.uid) ||
+               (hasRole('client') && existing().get('clientEmail', '').lower() == authEmail());
+      }
+
+      allow get: if isVerified() && canReadProposal();
+      allow list: if isVerified() && (
+        isSuperAdminRole() ||
+        (isAdminRole() && resource.data.get('adminId', '') == request.auth.uid) ||
+        (hasRole('employee') && resource.data.get('createdBy', '') == request.auth.uid) ||
+        (hasRole('client') && resource.data.get('clientEmail', '').lower() == authEmail())
+      );
+      allow create: if isVerified() && (isAdminRole() || hasRole('employee')) && isValidId(proposalId);
+      allow update: if isVerified() && (
+        isSuperAdminRole() ||
+        (isAdminRole() && existing().get('adminId', '') == request.auth.uid) ||
+        (hasRole('employee') && existing().get('createdBy', '') == request.auth.uid)
+      );
+      allow delete: if isAdminRole() || isDeveloper();
+    }
+
+    match /subscriptions/{userId} {
+      allow get: if isVerified() && (isOwner(userId) || isSuperAdminRole());
+      allow list: if isVerified() && (isOwner(userId) || isSuperAdminRole());
+      allow write: if isDeveloper();
+    }
+
+    match /payments/{paymentId} {
+      function canReadPayment() {
+        return isSuperAdminRole() ||
+                (isAdminRole() && (resource.data.get('adminId', '') == request.auth.uid || (exists(/databases/$(database)/documents/profiles/$(resource.data.get('issuedBy', ''))) && get(/databases/$(database)/documents/profiles/$(resource.data.get('issuedBy', ''))).data.adminId == request.auth.uid))) ||
+                (hasRole('employee') && (resource.data.get('issuedBy', '') == request.auth.uid || resource.data.get('userId', '') == request.auth.uid)) ||
+                (hasRole('client') && (resource.data.get('clientEmail', '').lower() == authEmail() || resource.data.get('userId', '') == request.auth.uid));
+      }
+
+      allow get: if isVerified() && canReadPayment();
+      allow list: if isVerified() && (
+        isSuperAdminRole() ||
+        (isAdminRole() && resource.data.get('adminId', '') == request.auth.uid) ||
+        (hasRole('employee') && (resource.data.get('issuedBy', '') == request.auth.uid || resource.data.get('userId', '') == request.auth.uid)) ||
+        (hasRole('client') && (resource.data.get('clientEmail', '').lower() == authEmail() || resource.data.get('userId', '') == request.auth.uid))
+      );
+      allow create: if isVerified() && (isAdminRole() || hasRole('employee')) && isValidId(paymentId);
+      allow update: if isVerified() && (isAdminRole() || (hasRole('employee') && existing().get('issuedBy', '') == request.auth.uid));
+      allow delete: if isAdminRole();
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if isSignedIn() || request.auth == null;
+      allow create: if isSignedIn() || request.auth == null;
+      allow update: if isSignedIn() || request.auth == null;
+      allow delete: if isSignedIn() || request.auth == null;
+    }
+
+    match /reports/{reportId} {
+      function canReadReport() {
+        return isAdminRole() || 
+               isDeveloper() || 
+               existing().get('createdBy', '') == request.auth.uid ||
+               (existing().get('sentToClient', false) == true && existing().get('clientEmail', '').lower() == authEmail());
+      }
+
+      allow get: if isVerified() && canReadReport();
+      allow list: if isVerified() && (
+        isDeveloper() || 
+        isAdminRole() ||
+        resource.data.get('createdBy', '') == request.auth.uid ||
+        (resource.data.get('sentToClient', false) == true && resource.data.get('clientEmail', '').lower() == authEmail())
+      );
+      allow create: if isVerified() && (isAdminRole() || hasRole('employee')) && isValidId(reportId);
+      allow update: if isVerified() && (
+        (isAdminRole() || isDeveloper() || existing().get('createdBy', '') == request.auth.uid) ||
+        (existing().get('sentToClient', false) == true && existing().get('clientEmail', '').lower() == authEmail() && incoming().diff(existing()).affectedKeys().hasOnly(['isViewed', 'viewedAt']))
+      );
+      allow delete: if isAdminRole() || isDeveloper();
+    }
+  }
+}

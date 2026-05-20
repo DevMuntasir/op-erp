@@ -1,0 +1,151 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function getUserData(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data;
+    }
+
+    function currentUserData() {
+      return getUserData(request.auth.uid);
+    }
+
+    function isRole(role) {
+      return isSignedIn() && currentUserData().role == role;
+    }
+
+    function isAdmin() {
+      return isRole('admin') || isRole('super_admin');
+    }
+
+    function isEmployee() {
+      return isRole('employee');
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Users ---
+    match /users/{userId} {
+      function isValidUser(data) {
+        return data.uid == userId && 
+               data.email is string && data.email.size() <= 100 &&
+               data.name is string && data.name.size() <= 100 &&
+               data.role in ['super_admin', 'admin', 'employee', 'client'] &&
+               data.status in ['online', 'offline'];
+      }
+
+      allow read: if isSignedIn() && (
+        isOwner(userId) || 
+        isAdmin() || 
+        (isEmployee() && getUserData(userId).adminId == currentUserData().adminId) ||
+        (isRole('client') && getUserData(userId).adminId == currentUserData().adminId)
+      );
+
+      allow create: if isSignedIn() && isOwner(userId) && isValidUser(incoming()) && (
+        // Forbid self-assigning high roles unless it's the first time or verified
+        // For simplicity in this demo environment, we allow 'admin' but strictly lock 'super_admin'
+        incoming().role != 'super_admin'
+      );
+
+      allow update: if isSignedIn() && (
+        (isOwner(userId) && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'photoURL', 'phoneNumber', 'status', 'lastSeen']) && isValidUser(incoming())) ||
+        (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['role', 'adminId', 'status']) && isValidUser(incoming()))
+      );
+    }
+
+    // --- tasks ---
+    match /tasks/{taskId} {
+      function isValidTask(data) {
+        return data.title is string && data.title.size() <= 200 &&
+               data.assignedTo is string &&
+               data.adminId is string &&
+               data.status in ['pending', 'in-progress', 'submitted'];
+      }
+
+      allow read: if isSignedIn() && (
+        existing().adminId == request.auth.uid || 
+        existing().assignedTo == request.auth.uid ||
+        (isEmployee() && existing().adminId == currentUserData().adminId)
+      );
+      
+      allow create: if isSignedIn() && isAdmin() && incoming().adminId == request.auth.uid && isValidTask(incoming());
+      
+      allow update: if isSignedIn() && (
+        (isAdmin() && existing().adminId == request.auth.uid && incoming().adminId == existing().adminId && isValidTask(incoming())) ||
+        (existing().assignedTo == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt', 'submission']))
+      );
+      
+      allow delete: if isSignedIn() && isAdmin() && existing().adminId == request.auth.uid;
+    }
+
+    // --- leads ---
+    match /leads/{leadId} {
+      allow read: if isSignedIn() && (
+        existing().adminId == request.auth.uid || 
+        (isEmployee() && currentUserData().adminId == existing().adminId)
+      );
+      allow create: if isSignedIn() && (isAdmin() || isEmployee()) && incoming().adminId == (isAdmin() ? request.auth.uid : currentUserData().adminId);
+      allow update, delete: if isSignedIn() && (
+        existing().adminId == request.auth.uid ||
+        (isAdmin() && existing().adminId == currentUserData().adminId)
+      );
+    }
+
+    // --- proposals ---
+    match /proposals/{proposalId} {
+      allow read: if isSignedIn() && (
+        existing().adminId == request.auth.uid || 
+        (isEmployee() && currentUserData().adminId == existing().adminId) ||
+        (isRole('client') && existing().clientEmail == request.auth.token.email)
+      );
+      allow create: if isSignedIn() && (isAdmin() || isEmployee()) && incoming().adminId == (isAdmin() ? request.auth.uid : currentUserData().adminId);
+      allow update, delete: if isSignedIn() && (
+        existing().adminId == request.auth.uid ||
+        (isAdmin() && existing().adminId == currentUserData().adminId)
+      );
+    }
+
+    // --- clients ---
+    match /clients/{clientId} {
+      allow read: if isSignedIn() && (
+        existing().adminId == request.auth.uid || 
+        (isEmployee() && existing().assignedEmployees.hasAll([request.auth.uid])) ||
+        (isRole('client') && existing().email == request.auth.token.email)
+      );
+      allow create, update, delete: if isSignedIn() && isAdmin() && existing().adminId == request.auth.uid;
+    }
+
+    // --- sessions ---
+    match /sessions/{sessionId} {
+      allow read: if isSignedIn() && (
+        existing().userId == request.auth.uid || 
+        existing().adminId == request.auth.uid
+      );
+      allow create: if isSignedIn() && incoming().userId == request.auth.uid;
+      allow update: if isSignedIn() && existing().userId == request.auth.uid;
+    }
+  }
+}

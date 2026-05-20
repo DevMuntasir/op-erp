@@ -1,0 +1,10 @@
+{
+  "name": "Remix: OP Media CRM",
+  "description": "Full-stack CRM and employee monitoring system for OP Media Agency, featuring AI-powered digital marketing proposal builder, task management, real-time chat, and time tracking.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation",
+    "display-capture"
+  ]
+}

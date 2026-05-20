@@ -1,0 +1,118 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile and authentication data",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string", "enum": ["super_admin", "admin", "employee", "client"] },
+        "adminId": { "type": "string" },
+        "status": { "type": "string" },
+        "lastSeen": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "name", "role", "status"]
+    },
+    "Task": {
+      "title": "Task",
+      "description": "A task assigned to an employee",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "assignedTo": { "type": "string" },
+        "adminId": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "in-progress", "submitted"] },
+        "priority": { "type": "string", "enum": ["low", "medium", "high"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "title", "assignedTo", "adminId", "status", "priority", "createdAt"]
+    },
+    "Lead": {
+      "title": "Lead",
+      "description": "Potential client lead",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "status": { "type": "string" },
+        "adminId": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "email", "status", "adminId", "createdBy", "createdAt"]
+    },
+    "Proposal": {
+      "title": "Proposal",
+      "description": "Strategic proposal for a client",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "clientName": { "type": "string" },
+        "clientEmail": { "type": "string" },
+        "adminId": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "status": { "type": "string" },
+        "totalValue": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "title", "clientName", "adminId", "createdBy", "status", "createdAt"]
+    },
+    "Client": {
+      "title": "Client",
+      "description": "Agency client",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "adminId": { "type": "string" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "email", "adminId", "status", "createdAt"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "User profile data"
+    },
+    "tasks/{taskId}": {
+      "schema": "Task",
+      "description": "Tasks managed by admins"
+    },
+    "leads/{leadId}": {
+      "schema": "Lead",
+      "description": "CRM Leads"
+    },
+    "proposals/{proposalId}": {
+      "schema": "Proposal",
+      "description": "Strategic Proposals"
+    },
+    "clients/{clientId}": {
+      "schema": "Client",
+      "description": "Agency Clients"
+    },
+    "sessions/{sessionId}": {
+      "schema": "object",
+      "description": "Time tracking sessions"
+    },
+    "messages/{messageId}": {
+      "schema": "object",
+      "description": "Chat messages"
+    },
+    "reports/{reportId}": {
+      "schema": "object",
+      "description": "Project reports"
+    }
+  }
+}
