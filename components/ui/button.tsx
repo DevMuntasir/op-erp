@@ -41,7 +41,7 @@ function Button({
   ...props
 }: ButtonPrimitive.Props & VariantProps<typeof buttonVariants>) {
   const frontByVariant = {
-    default: "bg-black text-white rounded-lg font-bold transform hover:-translate-y-1 transition duration-400",
+    default: "bg-black text-white rounded-sm cursor-pointer font-bold transform hover:-translate-y-1 transition duration-400",
     outline: "bg-white text-zinc-900 border border-zinc-300 hover:bg-zinc-50",
     secondary: "bg-zinc-700 text-white hover:bg-zinc-600",
     ghost: "bg-zinc-100 text-zinc-900 hover:bg-zinc-200",

@@ -9,4 +9,5 @@ export * from './proposals';
 export * from './billing';
 export * from './communication';
 export * from './profile';
+export * from './projects';
 export * from './shared/dialogs';

@@ -273,7 +273,7 @@ export const ClientManagement = () => {
           >
             <DialogTrigger
               render={
-                <Button className="bg-zinc-900 hover:bg-zinc-800 text-white gap-2 h-10 px-4 rounded-xl shadow-sm">
+                <Button >
                   <Plus className="w-4 h-4" />
                   Add Client
                 </Button>

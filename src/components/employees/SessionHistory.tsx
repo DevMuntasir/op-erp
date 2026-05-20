@@ -125,7 +125,8 @@ export const SessionHistory = () => {
       return tasks.find(t => t.id === taskId)?.title || 'Task Session';
     }
     if (projectId) {
-      return projects.find(p => p.id === projectId)?.name || 'Project Work';
+      const project = projects.find((p) => p.id === projectId);
+      return project?.title || project?.name || 'Project Work';
     }
     return 'General Activity';
   };

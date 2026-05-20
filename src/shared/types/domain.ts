@@ -35,6 +35,7 @@ export interface TaskSubmission {
 
 export interface Task {
   id: string;
+  projectId?: string | null;
   title: string;
   description?: string;
   adminId: string;
@@ -71,10 +72,29 @@ export interface Session {
 
 export interface Project {
   id: string;
-  name: string;
-  clientName?: string | null;
   adminId: string;
-  status: 'active' | 'archived' | string;
+  title: string;
+  description?: string | null;
+  status: string;
+  createdAt?: Dateish;
+  createdBy: string;
+  name?: string;
+}
+
+export interface ProjectUpsertPayload {
+  title?: string;
+  description?: string;
+  status?: string;
+}
+
+export interface ProjectDeliverable {
+  id: string;
+  taskId: string;
+  projectId: string;
+  uploadedBy: string;
+  fileUrl: string;
+  fileName: string;
+  fileType: string;
   createdAt?: Dateish;
 }
 

@@ -14,6 +14,7 @@ import { EmployeeDetail, SessionHistory } from '@/src/components/employees';
 
 import { BillingManagement } from '@/src/components/billing';
 import { LeadManagement, LeadFinder } from '@/src/components/leads';
+import { ProjectManagement } from '@/src/components/projects';
 
 import { ProposalDashboard, ProposalManagement, SmartProposalBuilder, ProposalPreview } from '@/src/components/proposals';
 
@@ -30,6 +31,7 @@ function AdminArea() {
         <Route path="tasks" element={<TaskManagement />} />
         <Route path="tasks/:taskId" element={<TaskDetail />} />
         <Route path="clients" element={<ClientManagement />} />
+        <Route path="projects" element={<ProjectManagement />} />
         <Route path="history" element={<SessionHistory />} />
         <Route path="monitoring" element={<AdminScreenshots />} />
         <Route path="reports" element={<ReportGenerator />} />

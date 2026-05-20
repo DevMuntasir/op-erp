@@ -353,7 +353,7 @@ export const TrackingControls = () => {
       ) : (
         <Button
           size="sm"
-          className="gap-2 bg-zinc-900 text-white hover:bg-zinc-800"
+      
           disabled={startMutation.isPending || !selectedTaskId}
           onClick={() => startMutation.mutate()}
         >

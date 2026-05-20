@@ -3,6 +3,8 @@ export const queryKeys = {
   employees: ['employees'] as const,
   invites: ['invites'] as const,
   clients: (filters?: unknown) => ['clients', filters ?? {}] as const,
+  projects: (filters?: unknown) => ['projects', filters ?? {}] as const,
+  project: (id: string) => ['project', id] as const,
   leads: (filters?: unknown) => ['leads', filters ?? {}] as const,
   tasks: (filters?: unknown) => ['tasks', filters ?? {}] as const,
   task: (id: string) => ['task', id] as const,

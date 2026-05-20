@@ -27,7 +27,8 @@ import {
   Sparkles,
   Globe,
   CreditCard,
-  Box
+  Box,
+  FolderKanban
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -47,6 +48,7 @@ const navItems = {
     { icon: LayoutDashboard, label: 'Dashboard', path: '/admin' },
     { icon: Users, label: 'Employees', path: '/admin/employees' },
     { icon: Briefcase, label: 'Clients', path: '/admin/clients' },
+    { icon: FolderKanban, label: 'Projects', path: '/admin/projects' },
     { icon: CreditCard, label: 'Billing', path: '/admin/billing' },
     { icon: Sparkles, label: 'Reporting', path: '/admin/reports' },
     { icon: Globe, label: 'Client Portal', path: '/client' },

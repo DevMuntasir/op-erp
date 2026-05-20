@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/src/App';
-import { Task, User, TaskPriority, TaskStatus, TaskSubmission, Client } from '@/src/types';
+import { Task, User, TaskPriority, TaskStatus, TaskSubmission, Client, Project } from '@/src/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -20,6 +20,7 @@ import { ConfirmDialog } from '@/src/components/shared/dialogs/ConfirmDialog';
 import { listTasks, createTask, updateTask, deleteTask as deleteTaskRequest } from '@/src/api/endpoints/tasks.api';
 import { listEmployees } from '@/src/api/endpoints/employees.api';
 import { listClients } from '@/src/api/endpoints/clients.api';
+import { listProjects } from '@/src/api/endpoints/projects.api';
 import { listSessions } from '@/src/api/endpoints/sessions.api';
 import { queryKeys } from '@/src/shared/constants/query-keys';
 import { startTaskWork } from '@/src/shared/tasks/start-task-work';
@@ -70,6 +71,24 @@ const sortTasks = (items: Task[], sortBy: 'createdAt' | 'dueDate') => {
   });
 };
 
+const resetTaskForm = (
+  setTitle: React.Dispatch<React.SetStateAction<string>>,
+  setDescription: React.Dispatch<React.SetStateAction<string>>,
+  setAssignedTo: React.Dispatch<React.SetStateAction<string>>,
+  setPriority: React.Dispatch<React.SetStateAction<TaskPriority>>,
+  setDueDate: React.Dispatch<React.SetStateAction<string>>,
+  setSelectedClientEmail: React.Dispatch<React.SetStateAction<string>>,
+  setSelectedProjectId: React.Dispatch<React.SetStateAction<string>>,
+) => {
+  setTitle('');
+  setDescription('');
+  setAssignedTo('');
+  setPriority('medium');
+  setDueDate('');
+  setSelectedClientEmail('');
+  setSelectedProjectId('');
+};
+
 export const TaskManagement = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -95,8 +114,10 @@ export const TaskManagement = () => {
   const [priority, setPriority] = useState<TaskPriority>('medium');
   const [dueDate, setDueDate] = useState('');
   const [selectedClientEmail, setSelectedClientEmail] = useState('');
+  const [selectedProjectId, setSelectedProjectId] = useState('');
 
   const [clients, setClients] = useState<Client[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
 
   // Filter state
   const [filterEmployee, setFilterEmployee] = useState<string>('all');
@@ -127,10 +148,11 @@ export const TaskManagement = () => {
     const load = async () => {
       setLoading(true);
       try {
-        const [taskData, employeeData, clientData] = await Promise.all([
+        const [taskData, employeeData, clientData, projectData] = await Promise.all([
           listTasks(),
           isAdmin ? listEmployees() : Promise.resolve([] as User[]),
           isAdmin ? listClients() : Promise.resolve([] as Client[]),
+          isAdmin ? listProjects() : Promise.resolve([] as Project[]),
         ]);
 
         if (cancelled) return;
@@ -138,6 +160,7 @@ export const TaskManagement = () => {
         setTasks(taskData);
         setAllUsers(employeeData.filter((employee) => employee.role === 'employee'));
         setClients(clientData);
+        setProjects(projectData);
       } catch (error: any) {
         if (cancelled) return;
         console.error('Failed to load task management data:', error);
@@ -245,6 +268,7 @@ export const TaskManagement = () => {
 
     try {
       const updatedTask = await updateTask(editingTask.id, {
+        projectId: selectedProjectId || null,
         title,
         description,
         assignedTo,
@@ -256,9 +280,7 @@ export const TaskManagement = () => {
       setTasks((current) => current.map((task) => task.id === editingTask.id ? updatedTask : task));
       toast.success('Task updated successfully');
       setEditingTask(null);
-      setTitle('');
-      setDescription('');
-      setAssignedTo('');
+      resetTaskForm(setTitle, setDescription, setAssignedTo, setPriority, setDueDate, setSelectedClientEmail, setSelectedProjectId);
     } catch (error: any) {
       toast.error('Failed to update task');
     }
@@ -301,11 +323,12 @@ export const TaskManagement = () => {
     setPriority(task.priority);
     setDueDate(toDateInputValue(task.dueDate));
     setSelectedClientEmail(task.clientEmail || '');
+    setSelectedProjectId(task.projectId || '');
   };
 
   const handleAddTask = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title || !assignedTo) {
+    if (!title || !assignedTo || !selectedProjectId) {
       toast.error('Please fill in all required fields');
       return;
     }
@@ -318,23 +341,20 @@ export const TaskManagement = () => {
 
     try {
       const createdTask = await createTask({
+        projectId: selectedProjectId,
         title,
         description,
         assignedTo,
-        assignedToName: assignedUser.name || null,
+        assignedToName: assignedUser.name || undefined,
         priority,
         dueDate: toApiDateTime(dueDate),
-        clientEmail: selectedClientEmail || null,
+        clientEmail: selectedClientEmail || undefined,
       });
       setTasks((current) => [createdTask, ...current]);
 
       toast.success('Task assigned successfully');
       setIsAdding(false);
-      setTitle('');
-      setDescription('');
-      setAssignedTo('');
-      setDueDate('');
-      setSelectedClientEmail('');
+      resetTaskForm(setTitle, setDescription, setAssignedTo, setPriority, setDueDate, setSelectedClientEmail, setSelectedProjectId);
     } catch (error: any) {
       console.error('Task creation error:', error);
       toast.error('Failed to assign task', {
@@ -352,9 +372,12 @@ export const TaskManagement = () => {
   };
 
   const employeeUsers = allUsers.filter((u) => u.role === 'employee' && !u.isDisabled);
+  const activeProjects = projects.filter((project) => project.status.toLowerCase() !== 'archived');
   const formatEmployeeLabel = (employee: User) => employee.name 
   const selectedAssignedToUser = employeeUsers.find((employee) => employee.uid === assignedTo);
   const selectedAssignedToLabel = selectedAssignedToUser ? formatEmployeeLabel(selectedAssignedToUser) : '';
+  const selectedProject = activeProjects.find((project) => project.id === selectedProjectId) ?? projects.find((project) => project.id === selectedProjectId);
+  const selectedProjectLabel = selectedProject?.title ?? '';
   const sortedTasks = useMemo(() => sortTasks(tasks, sortBy), [tasks, sortBy]);
 
   const filteredTasks = sortedTasks.filter(task => {
@@ -409,7 +432,12 @@ export const TaskManagement = () => {
         
         <div className="flex items-center gap-2">
           {isAdmin && (
-            <Dialog open={isAdding} onOpenChange={setIsAdding}>
+            <Dialog open={isAdding} onOpenChange={(open) => {
+              setIsAdding(open);
+              if (!open) {
+                resetTaskForm(setTitle, setDescription, setAssignedTo, setPriority, setDueDate, setSelectedClientEmail, setSelectedProjectId);
+              }
+            }}>
               <DialogTrigger render={
                 <Button className="gap-2">
                   <Plus className="w-4 h-4" />
@@ -417,70 +445,136 @@ export const TaskManagement = () => {
                 </Button>
               }>
               </DialogTrigger>
-              <DialogContent>
+              <DialogContent className="overflow-hidden border-zinc-200 p-0 sm:max-w-xl">
                 <DialogHeader>
-                  <DialogTitle>Assign New Task</DialogTitle>
+                  <div className="border-b border-zinc-200 bg-zinc-50 px-5 py-4">
+                    <DialogTitle className="text-base font-semibold">Assign New Task</DialogTitle>
+                    <p className="mt-1 text-xs text-zinc-500">Create a structured task with project ownership, assignee, and deadline.</p>
+                  </div>
                 </DialogHeader>
-                <form onSubmit={handleAddTask} className="space-y-4 py-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="title">Task Title</Label>
-                    <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g., Cold Calling - Real Estate" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="desc">Description</Label>
-                    <Textarea id="desc" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Task details..." />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Assign To</Label>
-                      <Select value={assignedTo} onValueChange={setAssignedTo}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select employee">
-                            {selectedAssignedToLabel || undefined}
+                <form onSubmit={handleAddTask} className="space-y-4 px-5 py-5">
+                  <div className="space-y-3 rounded-lg border border-zinc-200 p-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="title" className="text-xs uppercase tracking-wide text-zinc-500">
+                        Task Title
+                      </Label>
+                      <Input
+                        id="title"
+                        value={title}
+                        onChange={(e) => setTitle(e.target.value)}
+                        placeholder="e.g., Cold Calling - Real Estate"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs uppercase tracking-wide text-zinc-500">Project</Label>
+                      <Select  value={selectedProjectId} onValueChange={setSelectedProjectId}>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select project">
+                            {selectedProjectLabel || undefined}
                           </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
-                          {employeeUsers.map(emp => (
-                            <SelectItem key={emp.uid} value={emp.uid}>{formatEmployeeLabel(emp)}</SelectItem>
+                          {activeProjects.map((project) => (
+                            <SelectItem key={project.id} value={project.id}>
+                              {project.title}
+                            </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="space-y-2">
-                      <Label>Priority</Label>
-                      <Select value={priority} onValueChange={(v: TaskPriority) => setPriority(v)}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="low">Low</SelectItem>
-                          <SelectItem value="medium">Medium</SelectItem>
-                          <SelectItem value="high">High</SelectItem>
-                        </SelectContent>
-                      </Select>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="desc" className="text-xs uppercase tracking-wide text-zinc-500">
+                        Description
+                      </Label>
+                      <Textarea
+                        id="desc"
+                        value={description}
+                        onChange={(e) => setDescription(e.target.value)}
+                        placeholder="Task details, expected output, or execution notes..."
+                        className="min-h-[96px]"
+                      />
                     </div>
                   </div>
-                  <div className="grid grid-cols-1 gap-4">
-                    <div className="space-y-2">
-                      <Label>Target Client</Label>
-                      <Select value={selectedClientEmail} onValueChange={setSelectedClientEmail}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="No Client (Internal)" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="">None (Internal)</SelectItem>
-                          {clients.map(client => (
-                            <SelectItem key={client.id} value={client.email}>{client.name} ({client.company || 'Private'})</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+
+                  <div className="space-y-3 rounded-lg border border-zinc-200 p-3">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs uppercase tracking-wide text-zinc-500">Assign To</Label>
+                        <Select value={assignedTo} onValueChange={setAssignedTo}>
+                          <SelectTrigger className={"w-full"}>
+                            <SelectValue placeholder="Select employee">
+                              {selectedAssignedToLabel || undefined}
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            {employeeUsers.map((emp) => (
+                              <SelectItem key={emp.uid} value={emp.uid}>
+                                {formatEmployeeLabel(emp)}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs uppercase tracking-wide text-zinc-500">Priority</Label>
+                        <Select value={priority} onValueChange={(v: TaskPriority) => setPriority(v)}>
+                          <SelectTrigger className="w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="low">Low</SelectItem>
+                            <SelectItem value="medium">Medium</SelectItem>
+                            <SelectItem value="high">High</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs uppercase tracking-wide text-zinc-500">Target Client</Label>
+                        <Select value={selectedClientEmail} onValueChange={setSelectedClientEmail}>
+                            <SelectTrigger className="w-full">
+                            <SelectValue placeholder="No Client (Internal)" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="">None (Internal)</SelectItem>
+                            {clients.map((client) => (
+                              <SelectItem key={client.id} value={client.email}>
+                                {client.name} ({client.company || 'Private'})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="due-date" className="text-xs uppercase tracking-wide text-zinc-500">
+                          Due Date
+                        </Label>
+                        <Input id="due-date" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+                      </div>
                     </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="due-date">Due Date</Label>
-                    <Input id="due-date" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
-                  </div>
-                  <Button type="submit" className="w-full">Create Task</Button>
+
+<div className=' flex gap-4 justify-end'>
+                    <div>
+
+                        <Button type="submit" className="h-10 w-full" disabled={!activeProjects.length}>
+                          {activeProjects.length ? 'Create Task' : 'Create a Project First'}
+                        </Button>
+                      
+                    </div>
+            <div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+
+                          onClick={() => resetTaskForm(setTitle, setDescription, setAssignedTo, setPriority, setDueDate, setSelectedClientEmail, setSelectedProjectId)}
+                        >
+                          Reset form
+                        </Button>
+            </div>
+</div>
                 </form>
               </DialogContent>
             </Dialog>
@@ -588,7 +682,12 @@ export const TaskManagement = () => {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!editingTask} onOpenChange={(open) => !open && setEditingTask(null)}>
+      <Dialog open={!!editingTask} onOpenChange={(open) => {
+        if (!open) {
+          setEditingTask(null);
+          resetTaskForm(setTitle, setDescription, setAssignedTo, setPriority, setDueDate, setSelectedClientEmail, setSelectedProjectId);
+        }
+      }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Edit Task</DialogTitle>
@@ -597,6 +696,23 @@ export const TaskManagement = () => {
             <div className="space-y-2">
               <Label htmlFor="edit-title">Task Title</Label>
               <Input id="edit-title" value={title} onChange={(e) => setTitle(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>Project</Label>
+              <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select project">
+                    {selectedProjectLabel || undefined}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {activeProjects.map((project) => (
+                    <SelectItem key={project.id} value={project.id}>
+                      {project.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-desc">Description</Label>
