@@ -10,7 +10,7 @@ interface LogoProps {
 export const BrandLogo: React.FC<LogoProps> = ({ 
   className = "w-32 md:w-54", 
 }) => {
-  const logoUrl = "/api/proxy-image?url=https://www.opmediaagency.com/wp-content/uploads/2025/03/OP-Media-Logo3.png";
+  const logoUrl = "https://www.opmediaagency.com/wp-content/uploads/2025/03/OP-Media-Logo3.png";
 
   return (
     <div className={cn("flex items-center mx-auto transition-all duration-300 shrink-0", className)}>

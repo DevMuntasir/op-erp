@@ -105,7 +105,7 @@ const BillingManagement: React.FC = () => {
     const currentSubtotal = safeItems.reduce((sum: number, item: any) => sum + (Number(item.quantity || 0) * Number(item.price || 0)), 0);
     const currentTotal = currentSubtotal;
     
-    const logoUrl = "/api/proxy-image?url=https://www.opmediaagency.com/wp-content/uploads/2025/03/OP-Media-Logo3.png";
+    const logoUrl = "https://www.opmediaagency.com/wp-content/uploads/2025/03/OP-Media-Logo3.png";
 
     return (
       <div id="invoice-capture" className="bg-white p-8 sm:p-16 max-w-[800px] mx-auto min-h-[1000px] flex flex-col font-sans text-zinc-900 border border-zinc-100 shadow-sm print:shadow-none print:border-none print:p-0">
