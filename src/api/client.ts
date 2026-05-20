@@ -1,7 +1,6 @@
 import axios from 'axios';
 import { auth } from '@/src/lib/firebase';
 import { ApiClientError, ApiFailure, ApiResponse } from '@/src/shared/types/api';
-import { signOut } from 'firebase/auth';
 
 export const apiClient = axios.create({
   baseURL: 'https://op-media-backend.vercel.app',
@@ -22,9 +21,6 @@ apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
     const failure = error?.response?.data as ApiFailure | undefined;
-    if (error?.response?.status === 401 && auth.currentUser) {
-      await signOut(auth).catch(() => undefined);
-    }
     throw new ApiClientError(failure?.error?.message || error.message || 'Request failed', {
       code: failure?.error?.code,
       status: error?.response?.status ?? 500,

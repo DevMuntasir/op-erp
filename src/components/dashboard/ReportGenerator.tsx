@@ -30,6 +30,7 @@ import {
   FileDown
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { StatefulButton } from '@/components/ui/stateful-button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -1332,28 +1333,14 @@ export const ReportGenerator: React.FC = () => {
                     />
                   </div>
 
-                  <Button 
+                  <StatefulButton
                     onClick={handleGenerateReport}
-                    disabled={generating || delivering || (images.length === 0 && !notes.trim())}
-                    className="w-full bg-zinc-900 hover:bg-zinc-800 text-white rounded-2xl h-14 font-black uppercase tracking-widest text-xs transition-all shadow-xl shadow-zinc-200"
-                  >
-                    {generating ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        {editingReportId ? 'Updating Report...' : 'Analyzing Evidence...'}
-                      </>
-                    ) : delivering ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin text-brand" />
-                        Delivering to Client...
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="w-4 h-4 mr-2" />
-                        {editingReportId ? 'Update & Save Changes' : 'Generate Professional Report'}
-                      </>
-                    )}
-                  </Button>
+                    disabled={delivering || (images.length === 0 && !notes.trim())}
+                    state={generating || delivering ? 'loading' : 'idle'}
+                    idleText={editingReportId ? 'Update & Save Changes' : 'Generate Professional Report'}
+                    loadingText={generating ? (editingReportId ? 'Updating Report...' : 'Analyzing Evidence...') : 'Delivering to Client...'}
+                    className="h-14 rounded-2xl shadow-xl shadow-zinc-200"
+                  />
                   {editingReportId && (
                     <Button 
                       variant="ghost" 

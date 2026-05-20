@@ -40,45 +40,33 @@ function Button({
   children,
   ...props
 }: ButtonPrimitive.Props & VariantProps<typeof buttonVariants>) {
+  const frontByVariant = {
+    default: "bg-black text-white rounded-lg font-bold transform hover:-translate-y-1 transition duration-400",
+    outline: "bg-white text-zinc-900 border border-zinc-300 hover:bg-zinc-50",
+    secondary: "bg-zinc-700 text-white hover:bg-zinc-600",
+    ghost: "bg-zinc-100 text-zinc-900 hover:bg-zinc-200",
+    destructive: "bg-rose-600 text-white hover:bg-rose-700",
+    link: "bg-transparent text-brand underline-offset-4 hover:underline",
+  } as const
+
+  const currentVariant = variant ?? "default"
+
   return (
     <ButtonPrimitive
       data-slot="button"
       className={cn(buttonVariants({ variant, size, className }))}
       {...props}
     >
-      {/* Shadow */}
       <span
         className={cn(
-          "absolute inset-0 rounded-lg bg-black/60 blur-[2px] will-change-transform translate-y-[2px] transition-transform duration-[600ms]",
-          "[transition-timing-function:cubic-bezier(0.3,0.7,0.4,1)]",
-          "group-hover/button:translate-y-[4px]",
-          "group-active/button:translate-y-[1px]"
-        )}
-      />
-
-      {/* Edge */}
-      <span
-        className={cn(
-          "absolute inset-0 rounded-lg",
-          "bg-[linear-gradient(to_right,hsl(0_0%_8%)_0%,hsl(0_0%_14%)_8%,hsl(0_0%_8%)_92%,hsl(0_0%_4%)_100%)]"
-        )}
-      />
-
-      {/* Front */}
-      <span
-        className={cn(
-          "relative flex items-center justify-center rounded-lg",
-          "bg-black px-8 py-4",
-          "font-semibold uppercase tracking-[1.5px] text-white",
-          "transform -translate-y-1",
-          "transition-transform duration-[600ms]",
-          "[transition-timing-function:cubic-bezier(0.3,0.7,0.4,1)]",
-          "group-hover/button:-translate-y-[6px]",
-          "group-active/button:-translate-y-[2px]",
-          "group-hover/button:brightness-110",
+          "relative flex items-center justify-center rounded-md",
+          "px-8 py-2 text-sm font-semibold",
+          frontByVariant[currentVariant],
+          "transition-all duration-200 ease-out",
+          "group-hover/button:-translate-y-0.5 group-active/button:translate-y-0 group-active/button:scale-[0.98]",
           size === "xs" && "px-3 py-1 text-xs",
           size === "sm" && "px-4 py-2 text-sm",
-          size === "default" && "px-6 py-3 text-base",
+          size === "default" && "px-6 py-2 text-sm",
           size === "lg" && "px-8 py-4 text-lg",
           size?.includes("icon") && "p-0 size-full"
         )}
