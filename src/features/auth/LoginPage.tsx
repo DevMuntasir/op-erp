@@ -1,20 +1,92 @@
 import { BrandLogo } from '@/src/components/layout';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { useAuth } from '@/src/features/auth/AuthProvider';
-import { Loader2, Mail } from 'lucide-react';
-import { useEffect } from 'react';
+import { Loader2, LockKeyhole, Mail } from 'lucide-react';
+import { FormEvent, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { StatefulButton } from '@/components/ui/stateful-button';
+import { ApiClientError } from '@/src/shared/types/api';
+
+function GoogleIcon() {
+  return (
+    <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 24 24">
+      <path
+        d="M21.805 10.023h-9.72v3.955h5.57c-.24 1.27-.96 2.346-2.04 3.066v2.547h3.3c1.93-1.777 3.04-4.396 3.04-7.5 0-.69-.06-1.37-.15-2.068Z"
+        fill="#4285F4"
+      />
+      <path
+        d="M12.085 22c2.76 0 5.08-.914 6.77-2.477l-3.3-2.547c-.918.615-2.088.98-3.47.98-2.668 0-4.93-1.8-5.74-4.223H2.94v2.627A10.217 10.217 0 0 0 12.085 22Z"
+        fill="#34A853"
+      />
+      <path
+        d="M6.345 13.733a6.146 6.146 0 0 1-.32-1.933c0-.672.115-1.325.32-1.933V7.24H2.94a10.217 10.217 0 0 0 0 9.12l3.405-2.627Z"
+        fill="#FBBC04"
+      />
+      <path
+        d="M12.085 5.645c1.5 0 2.846.516 3.906 1.53l2.93-2.93C17.16 2.606 14.84 1.6 12.085 1.6A10.217 10.217 0 0 0 2.94 7.24l3.405 2.627c.81-2.423 3.072-4.222 5.74-4.222Z"
+        fill="#EA4335"
+      />
+    </svg>
+  );
+}
 
 export function LoginPage() {
-  const { login, user, loading } = useAuth();
+  const { login, loginWithPassword, user, loading } = useAuth();
   const navigate = useNavigate();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [googleSubmitting, setGoogleSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const showPassword = email.trim().length > 0;
 
   useEffect(() => {
     if (!user) return;
     navigate(user.role === 'client' ? '/client' : user.role === 'employee' ? '/employee' : '/admin', { replace: true });
   }, [user, navigate]);
+
+  const handleGoogleLogin = async () => {
+    setErrorMessage(null);
+    setGoogleSubmitting(true);
+
+    try {
+      await login();
+    } catch (error) {
+      if (error instanceof ApiClientError) {
+        setErrorMessage(error.message);
+      } else if (error instanceof Error) {
+        setErrorMessage(error.message);
+      } else {
+        setErrorMessage('Unable to continue. Please try again.');
+      }
+    } finally {
+      setGoogleSubmitting(false);
+    }
+  };
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!showPassword) return;
+
+    setErrorMessage(null);
+    setSubmitting(true);
+
+    try {
+      await loginWithPassword(email, password);
+    } catch (error) {
+      if (error instanceof ApiClientError) {
+        setErrorMessage(error.message);
+      } else if (error instanceof Error) {
+        setErrorMessage(error.message);
+      } else {
+        setErrorMessage('Unable to continue. Please try again.');
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -26,43 +98,87 @@ export function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 p-4">
-      <Card className="w-full max-w-md overflow-hidden rounded-[2rem] border-zinc-200 shadow-2xl">
-        <CardHeader className="space-y-6 bg-white pb-8 pt-10 text-center">
-          <BrandLogo className="mx-auto w-32 md:w-48" />
-          <div className="space-y-1">
-            <CardTitle className="text-3xl font-black tracking-tight text-zinc-900">AGENCY PORTAL</CardTitle>
-            <CardDescription className="font-medium text-zinc-500">
-               Access OP Media CRM.
+    <div className="flex min-h-screen items-center justify-center bg-[#f6f4ef] px-4 py-10">
+      <Card className="w-full max-w-md rounded-[2rem] border border-zinc-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.12)]">
+        <CardHeader className="space-y-6 px-8 pt-10 text-center">
+          <BrandLogo className="mx-auto w-32 md:w-40" />
+          <div className="space-y-3">
+            <CardTitle className="text-4xl font-semibold tracking-tight text-zinc-950">Log in or sign up</CardTitle>
+            <CardDescription className="mx-auto max-w-sm text-base leading-7 text-zinc-600">
+              You&apos;ll get smarter responses and can manage your CRM workspace from one place.
             </CardDescription>
           </div>
         </CardHeader>
-        <CardContent className="space-y-6 p-6">
-          <div className="rounded-2xl border border-zinc-100 bg-zinc-50 p-4 text-sm text-zinc-600">
-            Use the same Google email address that received your invitation.
-          </div>
-
-          <StatefulButton onClick={login} className="w-full" idleText=' Continue with Google' disabled={loading}
-            idleIcon={<>
-              <svg className="h-4 w-4" viewBox="0 0 24 24">
-                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-              </svg> 
-            </>}
+        <CardContent className="space-y-6 px-8 pb-8">
+          <button
+            type="button"
+            onClick={handleGoogleLogin}
+            disabled={loading || googleSubmitting || submitting}
+            className="inline-flex h-14 w-full items-center justify-center gap-3 rounded-full border border-zinc-300 bg-white px-6 text-base font-semibold text-zinc-900 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
           >
-         </StatefulButton>
+            {googleSubmitting ? <Loader2 className="h-5 w-5 animate-spin" /> : <GoogleIcon />}
+            Continue with Google
+          </button>
 
-          <div className="flex items-center gap-2 text-xs text-zinc-500">
-            <Mail className="h-4 w-4" />
-            Need access? Ask an admin or super admin to send an invitation.
+          <div className="flex items-center gap-4 text-xs font-semibold uppercase tracking-[0.28em] text-zinc-400">
+            <div className="h-px flex-1 bg-zinc-200" />
+            <span className="tracking-[0.22em]">Or</span>
+            <div className="h-px flex-1 bg-zinc-200" />
           </div>
+
+          <form className="space-y-4" onSubmit={handleSubmit}>
+            <div className="space-y-3">
+              <div className="relative">
+                <Mail className="pointer-events-none absolute left-5 top-1/2 h-5 w-5 -translate-y-1/2 text-zinc-400" />
+                <Input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(event) => {
+                    setEmail(event.target.value);
+                    setErrorMessage(null);
+                  }}
+                  placeholder="Email address"
+                  className="h-14 rounded-full border-zinc-300 bg-white pl-14 pr-5 text-base"
+                  autoComplete="email"
+                  required
+                />
+              </div>
+
+              {showPassword ? (
+                <div className="relative">
+                  <LockKeyhole className="pointer-events-none absolute left-5 top-1/2 h-5 w-5 -translate-y-1/2 text-zinc-400" />
+                  <Input
+                    id="password"
+                    type="password"
+                    value={password}
+                    onChange={(event) => {
+                      setPassword(event.target.value);
+                      setErrorMessage(null);
+                    }}
+                    placeholder="Password"
+                    className="h-14 rounded-full border-zinc-300 bg-white pl-14 pr-5 text-base"
+                    autoComplete="current-password"
+                    required
+                    autoFocus
+                  />
+                </div>
+              ) : null}
+            </div>
+
+            {errorMessage ? <p className="text-sm font-medium text-red-600">{errorMessage}</p> : null}
+
+            <StatefulButton
+              type="submit"
+              className="h-14 w-full rounded-full bg-zinc-950 text-base font-semibold text-white hover:bg-zinc-800"
+              state={submitting ? 'loading' : 'idle'}
+              idleText="Log in"
+              loadingText="Logging in..."
+              disabled={loading || submitting || googleSubmitting || !showPassword}
+            />
+          </form>
         </CardContent>
       </Card>
-      
-     
     </div>
   );
 }
-

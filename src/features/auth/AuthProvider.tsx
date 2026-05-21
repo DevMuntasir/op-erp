@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { GoogleAuthProvider, User as FirebaseUser, getRedirectResult, onAuthStateChanged, signOut, signInWithRedirect, signInWithPopup } from 'firebase/auth';
+import { GoogleAuthProvider, User as FirebaseUser, getRedirectResult, onAuthStateChanged, signInWithEmailAndPassword, signOut, signInWithPopup } from 'firebase/auth';
 import { collection, doc, getDoc, getDocs, limit, query, where } from 'firebase/firestore';
-import { getCurrentUser } from '@/src/api/endpoints/auth.api';
+import { acceptInvite, getCurrentUser } from '@/src/api/endpoints/auth.api';
 import { auth, db } from '@/src/lib/firebase';
 import { User } from '@/src/shared/types/domain';
 import { toast } from 'sonner';
@@ -11,6 +11,8 @@ interface AuthContextValue {
   firebaseUser: FirebaseUser | null;
   loading: boolean;
   login: () => Promise<void>;
+  loginWithPassword: (email: string, password: string) => Promise<void>;
+  acceptInvitation: (code: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
@@ -169,12 +171,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   };
 
+  const loginWithPassword = async (email: string, password: string) => {
+    await signInWithEmailAndPassword(auth, email.trim(), password);
+  };
+
+  const acceptInvitation = async (code: string) => {
+    await acceptInvite(code.trim());
+  };
+
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
       firebaseUser,
       loading,
       login,
+      loginWithPassword,
+      acceptInvitation,
       logout,
       refreshUser,
     }),
