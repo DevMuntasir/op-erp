@@ -1,6 +1,7 @@
 export const queryKeys = {
   me: ['me'] as const,
   employees: ['employees'] as const,
+  admins: ['admins'] as const,
   invites: ['invites'] as const,
   clients: (filters?: unknown) => ['clients', filters ?? {}] as const,
   projects: (filters?: unknown) => ['projects', filters ?? {}] as const,

@@ -1,13 +1,13 @@
 import React, { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/src/App';
-import { Client, CurrencyCode, SUPPORTED_CURRENCIES, User } from '@/src/types';
+import { Client, CurrencyCode, Project, SUPPORTED_CURRENCIES, User } from '@/src/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -20,10 +20,12 @@ import { createClient, deleteClient, updateClient } from '@/src/api/endpoints/cl
 import type { CreateClientRequest, UpdateClientRequest } from '@/src/api/endpoints/clients.api';
 import { listClients } from '@/src/api/endpoints/clients.api';
 import { listEmployees } from '@/src/api/endpoints/employees.api';
+import { listProjects } from '@/src/api/endpoints/projects.api';
 import { queryKeys } from '@/src/shared/constants/query-keys';
 import { formatCurrency } from '@/src/lib/utils';
 
 type ClientFormState = {
+  projectId: string;
   name: string;
   email: string;
   phone: string;
@@ -39,6 +41,7 @@ type ClientFormState = {
 };
 
 const initialFormState = (): ClientFormState => ({
+  projectId: '',
   name: '',
   email: '',
   phone: '',
@@ -77,6 +80,7 @@ const getClientPayload = (form: ClientFormState): CreateClientRequest => {
   const payload: CreateClientRequest = {
     name: form.name.trim(),
     email: form.email.trim(),
+    project_id: form.projectId,
     status: form.status || 'active',
   };
 
@@ -127,9 +131,15 @@ export const ClientManagement = () => {
     queryFn: listEmployees,
     enabled: !!user && isAdmin,
   });
+  const projectsQuery = useQuery({
+    queryKey: queryKeys.projects({ scope: user?.role ?? 'anonymous' }),
+    queryFn: listProjects,
+    enabled: !!user && isAdmin,
+  });
 
   const normalizedClients = useMemo(() => (clientsQuery.data ?? []).map(normalizeClient), [clientsQuery.data]);
   const employees = useMemo(() => (employeesQuery.data ?? []).filter((employee) => employee.role === 'employee'), [employeesQuery.data]);
+  const projects = useMemo<Project[]>(() => projectsQuery.data ?? [], [projectsQuery.data]);
 
   const adminOptions = useMemo(
     () =>
@@ -206,9 +216,14 @@ export const ClientManagement = () => {
   }, [adminFilter, employeeFilter, normalizedClients, searchTerm, statusFilter]);
 
   const handleSaveClient = async (e: React.FormEvent) => {
+    
     e.preventDefault();
     if (!form.name.trim() || !form.email.trim()) {
       toast.error('Name and Email are required');
+      return;
+    }
+    if (!form.projectId) {
+      toast.error('Project is required');
       return;
     }
 
@@ -228,6 +243,7 @@ export const ClientManagement = () => {
   const handleEdit = (client: Client) => {
     setEditingClient(client);
     setForm({
+      projectId: client.project_id || '',
       name: client.name,
       email: client.email,
       phone: client.phone || '',
@@ -279,140 +295,156 @@ export const ClientManagement = () => {
                 </Button>
               }
             />
-            <DialogContent className="max-w-2xl max-h-[90vh] min-h-0 overflow-hidden flex flex-col p-0 rounded-2xl border-zinc-200">
-              <DialogHeader className="p-6 border-b border-zinc-100 bg-zinc-50/50">
-                <DialogTitle className="text-xl font-bold">{editingClient ? 'Edit Client' : 'Add New Client'}</DialogTitle>
-                <DialogDescription>Enter the client's information and assign team members.</DialogDescription>
+            <DialogContent className="max-h-[90vh] min-h-0 overflow-hidden border-zinc-200 p-0 sm:max-w-2xl">
+              <DialogHeader>
+                <div className="border-b border-zinc-200 bg-zinc-50 px-5 py-4">
+                  <DialogTitle className="text-base font-semibold">{editingClient ? 'Edit Client' : 'Add Client'}</DialogTitle>
+                  <DialogDescription className="mt-1 text-xs text-zinc-500">Enter client info and assign team members.</DialogDescription>
+                </div>
               </DialogHeader>
 
-              <div className="flex-1 overflow-y-auto p-6">
-                <form id="client-form" onSubmit={handleSaveClient} className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Contact Name</Label>
-                      <Input
-                        placeholder="John Doe"
-                        value={form.name}
-                        onChange={(e) => setForm((current) => ({ ...current, name: e.target.value }))}
-                        className="rounded-xl border-zinc-200 h-11"
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Email Address</Label>
-                      <Input
-                        type="email"
-                        placeholder="john@company.com"
-                        value={form.email}
-                        onChange={(e) => setForm((current) => ({ ...current, email: e.target.value }))}
-                        className="rounded-xl border-zinc-200 h-11"
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Phone Number</Label>
-                      <Input
-                        placeholder="+1 (555) 000-0000"
-                        value={form.phone}
-                        onChange={(e) => setForm((current) => ({ ...current, phone: e.target.value }))}
-                        className="rounded-xl border-zinc-200 h-11"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Company Name</Label>
-                      <Input
-                        placeholder="e.g. Acme Corp"
-                        value={form.company}
-                        onChange={(e) => setForm((current) => ({ ...current, company: e.target.value }))}
-                        className="rounded-xl border-zinc-200 h-11"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Website</Label>
-                      <Input
-                        placeholder="https://example.com"
-                        value={form.website}
-                        onChange={(e) => setForm((current) => ({ ...current, website: e.target.value }))}
-                        className="rounded-xl border-zinc-200 h-11"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Status</Label>
-                      <Select value={form.status} onValueChange={(value: Client['status']) => setForm((current) => ({ ...current, status: value }))}>
-                        <SelectTrigger className="rounded-xl border-zinc-200 h-11">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent className="rounded-xl shadow-xl">
-                          <SelectItem value="active">Active</SelectItem>
-                          <SelectItem value="lead">Lead</SelectItem>
-                          <SelectItem value="inactive">Inactive</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Assigned Date</Label>
-                      <Input
-                        type="date"
-                        value={form.assignedDate}
-                        onChange={(e) => setForm((current) => ({ ...current, assignedDate: e.target.value }))}
-                        className="rounded-xl border-zinc-200 h-11"
-                        disabled
-                      />
-                      <p className="text-[10px] text-zinc-500">Read-only placeholder. The current client API does not persist assigned dates.</p>
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Invoice Value</Label>
-                      <div className="flex gap-2">
+              <form id="client-form" onSubmit={handleSaveClient} className="flex max-h-[calc(90vh-76px)] flex-col">
+                <div className="space-y-4 overflow-y-auto px-5 py-5">
+                  <div className="space-y-3 rounded-lg border border-zinc-200 p-3">
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs uppercase tracking-wide text-zinc-500">Contact Name</Label>
                         <Input
-                          type="number"
-                          placeholder="0.00"
-                          value={form.invoiceValue}
-                          onChange={(e) => setForm((current) => ({ ...current, invoiceValue: e.target.value }))}
-                          className="rounded-xl border-zinc-200 h-11 flex-1"
+                          placeholder="John Doe"
+                          value={form.name}
+                          onChange={(e) => setForm((current) => ({ ...current, name: e.target.value }))}
+                          required
                         />
-                        <Select
-                          value={form.selectedCurrency}
-                          onValueChange={(value: CurrencyCode) => setForm((current) => ({ ...current, selectedCurrency: value }))}
-                        >
-                          <SelectTrigger className="rounded-xl border-zinc-200 h-11 w-24">
-                            <SelectValue />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs uppercase tracking-wide text-zinc-500">Email Address</Label>
+                        <Input
+                          type="email"
+                          placeholder="john@company.com"
+                          value={form.email}
+                          onChange={(e) => setForm((current) => ({ ...current, email: e.target.value }))}
+                          required
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs uppercase tracking-wide text-zinc-500">Phone Number</Label>
+                        <Input
+                          placeholder="+1 (555) 000-0000"
+                          value={form.phone}
+                          onChange={(e) => setForm((current) => ({ ...current, phone: e.target.value }))}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs uppercase tracking-wide text-zinc-500">Company Name</Label>
+                        <Input
+                          placeholder="e.g. Acme Corp"
+                          value={form.company}
+                          onChange={(e) => setForm((current) => ({ ...current, company: e.target.value }))}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs uppercase tracking-wide text-zinc-500">Website</Label>
+                        <Input
+                          placeholder="https://example.com"
+                          value={form.website}
+                          onChange={(e) => setForm((current) => ({ ...current, website: e.target.value }))}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs uppercase tracking-wide text-zinc-500">Project</Label>
+                        <Select value={form.projectId} onValueChange={(value) => setForm((current) => ({ ...current, projectId: value }))}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select project" />
                           </SelectTrigger>
-                          <SelectContent className="rounded-xl shadow-xl">
-                            {SUPPORTED_CURRENCIES.map((curr) => (
-                              <SelectItem key={curr.code} value={curr.code}>
-                                {curr.code}
+                          <SelectContent>
+                            {projects.map((project) => (
+                              <SelectItem key={project.id} value={project.id}>
+                                {project.title || project.name}
                               </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
                       </div>
-                    </div>
-                    {!editingClient && (
-                      <div className="space-y-2">
-                        <Label className="text-xs font-bold uppercase tracking-wider text-zinc-500 flex items-center gap-2">
-                          <Lock className="w-3 h-3" />
-                          Portal Password (Optional)
-                        </Label>
-                        <Input
-                          type="password"
-                          placeholder="Create portal account instantly"
-                          value={form.portalPassword}
-                          onChange={(e) => setForm((current) => ({ ...current, portalPassword: e.target.value }))}
-                          className="rounded-xl border-zinc-200 h-11"
-                        />
-                        <p className="text-[10px] text-zinc-500">Portal creation is unavailable in the API-backed client module.</p>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs uppercase tracking-wide text-zinc-500">Status</Label>
+                        <Select value={form.status} onValueChange={(value: Client['status']) => setForm((current) => ({ ...current, status: value }))}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="active">Active</SelectItem>
+                            <SelectItem value="lead">Lead</SelectItem>
+                            <SelectItem value="inactive">Inactive</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </div>
-                    )}
+                    </div>
                   </div>
 
-                  <div className="space-y-3">
-                    <Label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Assign Team Members</Label>
-                    <ScrollArea className="h-40 rounded-xl border border-zinc-200 bg-zinc-50/40 p-3">
+                  <div className="space-y-3 rounded-lg border border-zinc-200 p-3">
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs uppercase tracking-wide text-zinc-500">Assigned Date</Label>
+                        <Input
+                          type="date"
+                          value={form.assignedDate}
+                          onChange={(e) => setForm((current) => ({ ...current, assignedDate: e.target.value }))}
+                          disabled
+                        />
+                        <p className="text-[10px] text-zinc-500">Read-only placeholder. The current client API does not persist assigned dates.</p>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs uppercase tracking-wide text-zinc-500">Invoice Value</Label>
+                        <div className="flex gap-2">
+                          <Input
+                            type="number"
+                            placeholder="0.00"
+                            value={form.invoiceValue}
+                            onChange={(e) => setForm((current) => ({ ...current, invoiceValue: e.target.value }))}
+                          />
+                          <Select
+                            value={form.selectedCurrency}
+                            onValueChange={(value: CurrencyCode) => setForm((current) => ({ ...current, selectedCurrency: value }))}
+                          >
+                            <SelectTrigger className="w-24">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {SUPPORTED_CURRENCIES.map((curr) => (
+                                <SelectItem key={curr.code} value={curr.code}>
+                                  {curr.code}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      {!editingClient && (
+                        <div className="space-y-1.5 md:col-span-2">
+                          <Label className="flex items-center gap-2 text-xs uppercase tracking-wide text-zinc-500">
+                            <Lock className="h-3 w-3" />
+                            Portal Password (Optional)
+                          </Label>
+                          <Input
+                            type="password"
+                            placeholder="Create portal account instantly"
+                            value={form.portalPassword}
+                            onChange={(e) => setForm((current) => ({ ...current, portalPassword: e.target.value }))}
+                          />
+                          <p className="text-[10px] text-zinc-500">Portal creation is unavailable in the API-backed client module.</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 rounded-lg border border-zinc-200 p-3">
+                    <Label className="text-xs uppercase tracking-wide text-zinc-500">Assign Team Members</Label>
+                    <ScrollArea className="h-40 rounded-lg border border-zinc-200 bg-zinc-50/40 p-3">
                       <div className="space-y-2">
                         {employees.map((emp) => (
                           <label
                             key={emp.uid}
-                            className="flex items-center gap-3 rounded-xl bg-white px-3 py-2 border border-zinc-100 cursor-pointer hover:border-zinc-200 transition-colors"
+                            className="flex cursor-pointer items-center gap-3 rounded-lg border border-zinc-100 bg-white px-3 py-2 transition-colors hover:border-zinc-200"
                           >
                             <Checkbox
                               checked={form.assignedEmployees.includes(emp.uid)}
@@ -425,43 +457,41 @@ export const ClientManagement = () => {
                                 }))
                               }
                             />
-                            <Avatar className="w-8 h-8">
+                            <Avatar className="h-8 w-8">
                               <AvatarImage src={emp.photoURL || undefined} />
                               <AvatarFallback>{emp.name[0]}</AvatarFallback>
                             </Avatar>
                             <div className="min-w-0">
-                              <div className="text-sm font-medium text-zinc-900 truncate">{emp.name}</div>
-                              <div className="text-xs text-zinc-500 truncate">{emp.email}</div>
+                              <div className="truncate text-sm font-medium text-zinc-900">{emp.name}</div>
+                              <div className="truncate text-xs text-zinc-500">{emp.email}</div>
                             </div>
                           </label>
                         ))}
-                        {!employees.length && (
-                          <div className="text-xs text-zinc-500 px-3 py-6 text-center">No employee options available for assignment.</div>
-                        )}
+                        {!employees.length && <div className="px-3 py-6 text-center text-xs text-zinc-500">No employee options available for assignment.</div>}
                       </div>
                     </ScrollArea>
                   </div>
 
-                  <div className="space-y-2">
-                    <Label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Internal Notes</Label>
+                  <div className="space-y-1.5 rounded-lg border border-zinc-200 p-3">
+                    <Label className="text-xs uppercase tracking-wide text-zinc-500">Internal Notes</Label>
                     <Input
                       placeholder="Add any context about this client..."
                       value={form.notes}
                       onChange={(e) => setForm((current) => ({ ...current, notes: e.target.value }))}
-                      className="rounded-xl border-zinc-200 h-11"
                     />
                   </div>
-                </form>
-              </div>
+                </div>
 
-              <DialogFooter className="p-6 border-t border-zinc-100 bg-white">
-                <Button type="button" variant="ghost" onClick={resetForm} className="rounded-xl h-11 px-6">
-                  Cancel
-                </Button>
-                <Button type="submit" form="client-form" disabled={isSaving} className="bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl h-11 px-8">
-                  {isSaving ? 'Saving...' : editingClient ? 'Update Client' : 'Create Client'}
-                </Button>
-              </DialogFooter>
+                <div className="space-y-2 border-t border-zinc-200 px-5 py-4">
+                  <Button type="submit" className="h-10 w-full" disabled={isSaving || !projects.length}>
+                    {isSaving ? 'Processing...' : editingClient ? 'Update Client' : 'Create Client'}
+                  </Button>
+                  {!projects.length && <p className="text-center text-xs text-zinc-500">No projects found. Create a project first.</p>}
+                  <Button type="button" variant="ghost" className="w-full text-xs text-zinc-500 hover:text-zinc-700" onClick={resetForm}>
+                    Reset form
+                  </Button>
+                </div>
+              </form>
             </DialogContent>
           </Dialog>
         )}

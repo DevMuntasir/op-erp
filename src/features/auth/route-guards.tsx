@@ -24,7 +24,14 @@ export function ProtectedRoute({ roles }: { roles: UserRole[] }) {
   }
 
   if (!roles.includes(user.role)) {
-    const redirect = user.role === 'client' ? '/client' : user.role === 'employee' ? '/employee' : '/admin';
+    const redirect =
+      user.role === 'client'
+        ? '/client'
+        : user.role === 'employee'
+          ? '/employee'
+          : user.role === 'super_admin'
+            ? '/super-admin'
+            : '/admin';
     return <Navigate to={redirect} replace />;
   }
 
@@ -48,6 +55,10 @@ export function RootRedirect() {
 
   if (user.role === 'employee') {
     return <Navigate to="/employee" replace />;
+  }
+
+  if (user.role === 'super_admin') {
+    return <Navigate to="/super-admin" replace />;
   }
 
   return <Navigate to="/admin" replace />;

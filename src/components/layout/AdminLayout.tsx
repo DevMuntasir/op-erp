@@ -1,47 +1,42 @@
-import React, { useEffect, useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { useAuth } from '@/src/App';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { listNotifications, markNotificationRead } from '@/src/api/endpoints/notifications.api';
+import { useAuth } from '@/src/App';
+import { BrandLogo } from '@/src/components/layout/BrandLogo';
+import { TrackingControls } from '@/src/components/tasks/TrackingControls';
 import { queryKeys } from '@/src/shared/constants/query-keys';
-import { 
-  LayoutDashboard, 
-  Users, 
-  CheckSquare, 
-  MessageSquare, 
-  LogOut, 
-  Settings,
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
   Bell,
-  Search,
+  Box,
+  Briefcase,
+  CheckSquare,
+  CreditCard,
+  FileText,
+  FolderKanban,
+  Globe,
+  History,
+  LayoutDashboard,
+  LogOut,
+  Map,
   Menu,
-  Check,
+  MessageSquare,
+  Monitor,
+  Phone,
+  Search,
+  Settings,
+  Sparkles,
   User as UserIcon,
   UserPlus,
-  Map,
-  Phone,
-  Monitor,
-  Clock,
-  Briefcase,
-  History,
-  FileText,
-  Sparkles,
-  Globe,
-  CreditCard,
-  Box,
-  FolderKanban
+  Users
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
-import { Badge } from '@/components/ui/badge';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { toast } from 'sonner';
-import { TrackingControls } from '@/src/components/tasks/TrackingControls';
-import { BrandLogo } from '@/src/components/layout/BrandLogo';
-import { Notification } from '@/src/shared/types/domain';
+import React, { useEffect, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 const navItems = {
   admin: [
@@ -61,6 +56,25 @@ const navItems = {
     { icon: MessageSquare, label: 'Messages', path: '/admin/messages' },
     { icon: Phone, label: 'Call History', path: '/admin/calls' },
     { icon: UserIcon, label: 'Profile', path: '/admin/profile' },
+  ],
+  super_admin: [
+    { icon: LayoutDashboard, label: 'Dashboard', path: '/super-admin' },
+    { icon: Users, label: 'Admins', path: '/super-admin/admins' },
+    { icon: Users, label: 'Employees', path: '/super-admin/employees' },
+    { icon: Briefcase, label: 'Clients', path: '/super-admin/clients' },
+    { icon: FolderKanban, label: 'Projects', path: '/super-admin/projects' },
+    { icon: CreditCard, label: 'Billing', path: '/super-admin/billing' },
+    { icon: Sparkles, label: 'Reporting', path: '/super-admin/reports' },
+    { icon: Globe, label: 'Client Portal', path: '/client' },
+    { icon: Monitor, label: 'Monitoring', path: '/super-admin/monitoring' },
+    { icon: History, label: 'History', path: '/super-admin/history' },
+    { icon: CheckSquare, label: 'Tasks', path: '/super-admin/tasks' },
+    { icon: UserPlus, label: 'Leads', path: '/super-admin/leads' },
+    { icon: FileText, label: 'Proposals', path: '/super-admin/proposals' },
+    { icon: Map, label: 'Lead Finder', path: '/super-admin/finder' },
+    { icon: MessageSquare, label: 'Messages', path: '/super-admin/messages' },
+    { icon: Phone, label: 'Call History', path: '/super-admin/calls' },
+    { icon: UserIcon, label: 'Profile', path: '/super-admin/profile' },
   ],
   employee: [
     { icon: LayoutDashboard, label: 'My Dashboard', path: '/employee' },
@@ -193,7 +207,7 @@ function SidebarContent({
   );
 }
 
-export const AppLayout: React.FC<{ children: React.ReactNode, role: 'admin' | 'employee' }> = ({ children, role }) => {
+export const AppLayout: React.FC<{ children: React.ReactNode, role: 'admin' | 'super_admin' | 'employee' }> = ({ children, role }) => {
   const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
@@ -238,6 +252,7 @@ export const AppLayout: React.FC<{ children: React.ReactNode, role: 'admin' | 'e
   };
 
   const currentNavItems = navItems[role];
+  const basePath = role === 'employee' ? '/employee' : role === 'super_admin' ? '/super-admin' : '/admin';
 
   const markAllAsRead = async () => {
     if (!user || notifications.length === 0) return;
@@ -357,9 +372,9 @@ export const AppLayout: React.FC<{ children: React.ReactNode, role: 'admin' | 'e
                               readMutation.mutate(n.id);
                             }
                             if (n.type === 'message') {
-                              navigate(role === 'admin' ? '/admin/messages' : '/employee/messages');
+                              navigate(`${basePath}/messages`);
                             } else if (n.type === 'task') {
-                              navigate(role === 'admin' ? '/admin/tasks' : '/employee/tasks');
+                              navigate(`${basePath}/tasks`);
                             }
                             setIsNotificationsOpen(false);
                           }}

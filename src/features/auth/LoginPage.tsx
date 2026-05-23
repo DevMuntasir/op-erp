@@ -44,7 +44,7 @@ export function LoginPage() {
 
   useEffect(() => {
     if (!user) return;
-    navigate(user.role === 'client' ? '/client' : user.role === 'employee' ? '/employee' : '/admin', { replace: true });
+    navigate(user.role === 'client' ? '/client' : user.role === 'employee' ? '/employee' : user.role === 'super_admin' ? '/super-admin' : '/admin', { replace: true });
   }, [user, navigate]);
 
   const handleGoogleLogin = async () => {

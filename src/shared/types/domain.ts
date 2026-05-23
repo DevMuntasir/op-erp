@@ -112,6 +112,7 @@ export interface Screenshot {
 export interface Client {
   id: string;
   adminId: string;
+  project_id?: string | null;
   name: string;
   email: string;
   phone?: string | null;
@@ -131,6 +132,7 @@ export interface Client {
 export interface ClientUpsertPayload {
   name?: string;
   email?: string;
+  project_id?: string;
   phone?: string;
   company?: string;
   website?: string;
