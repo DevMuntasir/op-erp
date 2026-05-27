@@ -219,8 +219,8 @@ export const AppLayout: React.FC<{ children: React.ReactNode, role: 'admin' | 's
   const notificationsQuery = useQuery({
     queryKey: queryKeys.notifications,
     queryFn: listNotifications,
-    enabled: !!user,
-    refetchInterval: 15_000,
+    enabled: !!user && isNotificationsOpen,
+    refetchInterval: isNotificationsOpen ? 15_000 : undefined,
   });
 
   const readMutation = useMutation({

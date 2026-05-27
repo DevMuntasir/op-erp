@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useLocation } from 'react-router-dom';
 import { useAuth } from '@/src/App';
 import { listEmployees } from '@/src/api/endpoints/employees.api';
 import { listTasks } from '@/src/api/endpoints/tasks.api';
@@ -22,6 +23,8 @@ const formatCurrency = (value: number) =>
 
 export const DashboardOverview = () => {
   const { user } = useAuth();
+  const location = useLocation();
+  const isDashboardPage = location.pathname.includes('/dashboard') || location.pathname.match(/\/(admin|super-admin|employee)$/);
 
   const employeesQuery = useQuery({
     queryKey: queryKeys.employees,
@@ -40,8 +43,8 @@ export const DashboardOverview = () => {
   const sessionsQuery = useQuery({
     queryKey: queryKeys.sessions({ dashboard: true }),
     queryFn: listSessions,
-    enabled: !!user,
-    refetchInterval: 10_000,
+    enabled: !!user && isDashboardPage,
+    refetchInterval: isDashboardPage ? 10_000 : undefined,
   });
 
   const screenshotsQuery = useQuery({

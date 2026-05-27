@@ -4,6 +4,12 @@ import { Lead, LeadUpsertPayload } from '@/src/shared/types/domain';
 export type CreateLeadRequest = Required<Pick<LeadUpsertPayload, 'name'>> & Omit<LeadUpsertPayload, 'name'>;
 export type UpdateLeadRequest = LeadUpsertPayload;
 
+const stringifyIfNeeded = (value: unknown): string => {
+  if (typeof value === 'string') return value;
+  if (value && typeof value === 'object') return JSON.stringify(value);
+  return '';
+};
+
 const normalizeLead = (lead: Partial<Lead>): Lead => ({
   id: typeof lead.id === 'string' ? lead.id : '',
   name: lead.name ?? '',
@@ -11,8 +17,8 @@ const normalizeLead = (lead: Partial<Lead>): Lead => ({
   phone: lead.phone ?? '',
   company: lead.company ?? '',
   jobTitle: lead.jobTitle ?? '',
-  location: lead.location ?? lead.address ?? '',
-  address: lead.address ?? lead.location ?? '',
+  location: stringifyIfNeeded(lead.location ?? lead.address ?? ''),
+  address: stringifyIfNeeded(lead.address ?? lead.location ?? ''),
   website: lead.website ?? '',
   status: lead.status ?? 'new',
   source: lead.source ?? '',
@@ -47,4 +53,10 @@ export async function updateLead(id: string, body: UpdateLeadRequest) {
 export async function deleteLead(id: string) {
   const lead = await deleteApiData<Lead>(`/v1/leads/${id}`);
   return normalizeLead(lead);
+}
+
+export async function searchLeads(query: string) {
+  const data = await postApiData<Lead[] | Lead>('/v1/leads/search', { query });
+  const items = Array.isArray(data) ? data : data ? [data] : [];
+  return items.map(normalizeLead);
 }

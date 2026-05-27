@@ -142,7 +142,6 @@ export const TrackingControls = () => {
     queryKey: queryKeys.sessions({ scope: 'me' }),
     queryFn: listSessions,
     enabled: !!user,
-    refetchInterval: 10_000,
   });
 
   const activeSession = useMemo<Session | null>(() => {
