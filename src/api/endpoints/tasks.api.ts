@@ -2,7 +2,7 @@ import { deleteApiData, getApiData, patchApiData, postApiData } from '@/src/api/
 import { Message, Task, TaskSubmission } from '@/src/shared/types/domain';
 
 export type CreateTaskRequest = {
-  projectId?: string;
+  projectId: string;
   title: string;
   description?: string;
   assignedTo: string;

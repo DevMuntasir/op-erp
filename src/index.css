@@ -236,6 +236,9 @@
     --sidebar-ring: hsl(217.2 91.2% 59.8%);
 }
 
+
+
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -389,11 +392,11 @@
     display: none !important;
   }
   
-  body > div[role="dialog"], body > div[data-radix-portal] {
+  /* body > div[role="dialog"], body > div[data-radix-portal] {
     display: block !important;
     position: static !important;
-  }
-
+  } */
+/* 
   div[role="dialog"] {
     position: absolute !important;
     left: 0 !important;
@@ -410,7 +413,7 @@
     max-width: 100% !important;
     max-height: none !important;
     overflow: visible !important;
-  }
+  } */
 
   #invoice-capture {
     box-shadow: none !important;

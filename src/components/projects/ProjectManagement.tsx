@@ -3,20 +3,20 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Textarea } from '@/components/ui/textarea';
 import { ConfirmDialog } from '@/src/components/shared/dialogs/ConfirmDialog';
-import { createProject, deleteProject, listProjects, updateProject } from '@/src/api/endpoints/projects.api';
-import type { CreateProjectRequest, UpdateProjectRequest } from '@/src/api/endpoints/projects.api';
+import { deleteProject, getProjectDetails, listProjects, updateProject } from '@/src/api/endpoints/projects.api';
+import type { UpdateProjectRequest, ProjectDetails } from '@/src/api/endpoints/projects.api';
 import { useAuth } from '@/src/App';
 import { queryKeys } from '@/src/shared/constants/query-keys';
 import { Project } from '@/src/types';
 import { Edit2, Eye, FolderKanban, Plus, Search, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { ProjectCreationWizard } from './ProjectCreationWizard';
 
 type ProjectFormState = {
   title: string;
@@ -29,18 +29,6 @@ const initialFormState = (): ProjectFormState => ({
   description: '',
   status: 'active',
 });
-
-const toProjectPayload = (form: ProjectFormState): CreateProjectRequest => {
-  const payload: CreateProjectRequest = {
-    title: form.title.trim(),
-  };
-
-  if (form.description.trim()) {
-    payload.description = form.description.trim();
-  }
-
-  return payload;
-};
 
 const toProjectUpdatePayload = (form: ProjectFormState): UpdateProjectRequest => {
   const payload: UpdateProjectRequest = {
@@ -87,7 +75,8 @@ const getProjectStatusClass = (status: string) => {
 export const ProjectManagement = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const [isAdding, setIsAdding] = useState(false);
+  const [isWizardOpen, setIsWizardOpen] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [deletingProject, setDeletingProject] = useState<Project | null>(null);
   const [viewingProject, setViewingProject] = useState<Project | null>(null);
@@ -100,23 +89,17 @@ export const ProjectManagement = () => {
     enabled: !!user,
   });
 
+  const projectDetailsQuery = useQuery({
+    queryKey: ['project-details', viewingProject?.id],
+    queryFn: () => viewingProject ? getProjectDetails(viewingProject.id) : null,
+    enabled: !!viewingProject,
+  });
+
   const resetForm = () => {
     setForm(initialFormState());
     setEditingProject(null);
-    setIsAdding(false);
+    setIsEditing(false);
   };
-
-  const createMutation = useMutation({
-    mutationFn: createProject,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.projects({ scope: user?.role ?? 'anonymous' }) });
-      toast.success('Project created successfully');
-      resetForm();
-    },
-    onError: (error: Error) => {
-      toast.error('Failed to create project', { description: error.message });
-    },
-  });
 
   const updateMutation = useMutation({
     mutationFn: ({ id, body }: { id: string; body: UpdateProjectRequest }) => updateProject(id, body),
@@ -142,7 +125,7 @@ export const ProjectManagement = () => {
     },
   });
 
-  const handleSaveProject = async (e: React.FormEvent) => {
+  const handleUpdateProject = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (form.title.trim().length < 3) {
@@ -150,15 +133,12 @@ export const ProjectManagement = () => {
       return;
     }
 
-    if (editingProject) {
-      await updateMutation.mutateAsync({
-        id: editingProject.id,
-        body: toProjectUpdatePayload(form),
-      });
-      return;
-    }
+    if (!editingProject) return;
 
-    await createMutation.mutateAsync(toProjectPayload(form));
+    await updateMutation.mutateAsync({
+      id: editingProject.id,
+      body: toProjectUpdatePayload(form),
+    });
   };
 
   const handleDeleteProject = async () => {
@@ -173,7 +153,7 @@ export const ProjectManagement = () => {
       description: project.description ?? '',
       status: project.status || 'active',
     });
-    setIsAdding(true);
+    setIsEditing(true);
   };
 
   const projects = projectsQuery.data ?? [];
@@ -191,7 +171,7 @@ export const ProjectManagement = () => {
     [projects, searchTerm],
   );
 
-  const isSaving = createMutation.isPending || updateMutation.isPending;
+  const isSaving = updateMutation.isPending;
   const loadingError = projectsQuery.error as Error | null;
 
   return (
@@ -202,79 +182,15 @@ export const ProjectManagement = () => {
           <p className="text-zinc-500 text-sm">Manage agency projects and track their current lifecycle state.</p>
         </div>
 
-        <Dialog
-          open={isAdding}
-          onOpenChange={(open) => {
-            if (!open) resetForm();
-            setIsAdding(open);
-          }}
+        <Button
+          onClick={() => setIsWizardOpen(true)}
+          className="bg-zinc-900 hover:bg-zinc-800 text-white gap-2 h-10 px-4 rounded-xl shadow-sm"
         >
-          <DialogTrigger
-            render={
-              <Button className="bg-zinc-900 hover:bg-zinc-800 text-white gap-2 h-10 px-4 rounded-xl shadow-sm">
-                <Plus className="w-4 h-4" />
-                Create Project
-              </Button>
-            }
-          />
-          <DialogContent className="max-w-2xl max-h-[90vh] min-h-0 overflow-hidden flex flex-col p-0 rounded-2xl border-zinc-200">
-            <DialogHeader className="p-6 border-b border-zinc-100 bg-zinc-50/50">
-              <DialogTitle className="text-xl font-bold">{editingProject ? 'Edit Project' : 'Create Project'}</DialogTitle>
-              <DialogDescription>Capture the project title and optional description for your internal workflow.</DialogDescription>
-            </DialogHeader>
+          <Plus className="w-4 h-4" />
+          Create Project
+        </Button>
 
-            <div className="flex-1 overflow-y-auto p-6">
-              <form id="project-form" onSubmit={handleSaveProject} className="space-y-6">
-                <div className="space-y-2">
-                  <Label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Project Title</Label>
-                  <Input
-                    placeholder="e.g. Q3 Paid Media Launch"
-                    value={form.title}
-                    onChange={(e) => setForm((current) => ({ ...current, title: e.target.value }))}
-                    className="rounded-xl border-zinc-200 h-11"
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Description</Label>
-                  <Textarea
-                    placeholder="Optional project notes, scope summary, or campaign context..."
-                    value={form.description}
-                    onChange={(e) => setForm((current) => ({ ...current, description: e.target.value }))}
-                    className="rounded-xl border-zinc-200 min-h-32"
-                  />
-                </div>
-
-                {editingProject && (
-                  <div className="space-y-2">
-                    <Label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Status</Label>
-                    <Select value={form.status} onValueChange={(value: string) => setForm((current) => ({ ...current, status: value }))}>
-                      <SelectTrigger className="rounded-xl border-zinc-200 h-11">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="rounded-xl shadow-xl">
-                        <SelectItem value="active">Active</SelectItem>
-                        <SelectItem value="paused">Paused</SelectItem>
-                        <SelectItem value="completed">Completed</SelectItem>
-                        <SelectItem value="archived">Archived</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-              </form>
-            </div>
-
-            <DialogFooter className="p-6 border-t border-zinc-100 bg-white">
-              <Button type="button" variant="ghost" onClick={resetForm} className="rounded-xl h-11 px-6">
-                Cancel
-              </Button>
-              <Button type="submit" form="project-form" disabled={isSaving} className="bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl h-11 px-8">
-                {isSaving ? 'Saving...' : editingProject ? 'Update Project' : 'Create Project'}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <ProjectCreationWizard open={isWizardOpen} onOpenChange={setIsWizardOpen} />
       </div>
 
       <Card className="rounded-2xl border-zinc-200 shadow-sm overflow-hidden bg-white">
@@ -397,36 +313,131 @@ export const ProjectManagement = () => {
         <DialogContent className="max-w-xl rounded-2xl border-zinc-200">
           <DialogHeader>
             <DialogTitle className="text-xl font-bold">{viewingProject?.title}</DialogTitle>
-            <DialogDescription>Project snapshot from the current list response.</DialogDescription>
+            <DialogDescription>Detailed project information and related data.</DialogDescription>
           </DialogHeader>
 
-          {viewingProject && (
+          {projectDetailsQuery.isLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="w-6 h-6 border-2 border-zinc-200 border-t-zinc-800 rounded-full animate-spin" />
+            </div>
+          ) : projectDetailsQuery.data ? (
             <div className="space-y-5">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="rounded-xl border border-zinc-200 bg-zinc-50/50 p-4">
                   <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Status</p>
-                  <Badge className={`mt-2 rounded-xl px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider border-none shadow-sm ${getProjectStatusClass(viewingProject.status)}`}>
-                    {viewingProject.status}
+                  <Badge className={`mt-2 rounded-xl px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider border-none shadow-sm ${getProjectStatusClass(projectDetailsQuery.data.status)}`}>
+                    {projectDetailsQuery.data.status}
                   </Badge>
                 </div>
                 <div className="rounded-xl border border-zinc-200 bg-zinc-50/50 p-4">
                   <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Created</p>
-                  <p className="mt-2 text-sm font-semibold text-zinc-900">{formatProjectDate(viewingProject.createdAt)}</p>
+                  <p className="mt-2 text-sm font-semibold text-zinc-900">{formatProjectDate(projectDetailsQuery.data.createdAt)}</p>
                 </div>
                 <div className="rounded-xl border border-zinc-200 bg-zinc-50/50 p-4 sm:col-span-2">
                   <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Created By</p>
-                  <p className="mt-2 text-sm font-semibold text-zinc-900 break-all">{viewingProject.createdBy || 'Unknown'}</p>
+                  <p className="mt-2 text-sm font-semibold text-zinc-900 break-all">{projectDetailsQuery.data.createdBy || 'Unknown'}</p>
                 </div>
               </div>
 
               <div className="rounded-xl border border-zinc-200 bg-white p-4">
                 <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Description</p>
                 <p className="mt-2 text-sm leading-6 text-zinc-700 whitespace-pre-wrap">
-                  {viewingProject.description?.trim() || 'No description provided.'}
+                  {projectDetailsQuery.data.description?.trim() || 'No description provided.'}
                 </p>
               </div>
+
+              {projectDetailsQuery.data.clients.length > 0 && (
+                <div className="rounded-xl border border-zinc-200 bg-zinc-50/50 p-4">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Clients ({projectDetailsQuery.data.clients.length})</p>
+                  <div className="mt-2 space-y-2">
+                    {projectDetailsQuery.data.clients.map((client) => (
+                      <div key={client.id} className="flex items-center gap-3 p-2 rounded-lg bg-white border border-zinc-100">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-zinc-900 truncate">{client.name}</p>
+                          <p className="text-xs text-zinc-500 truncate">{client.email}</p>
+                        </div>
+                        <Badge className="rounded-lg bg-emerald-100 text-emerald-700 border-none text-[10px] font-bold">
+                          {client.status || 'active'}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {projectDetailsQuery.data.tasks.length > 0 && (
+                <div className="rounded-xl border border-zinc-200 bg-zinc-50/50 p-4">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Tasks ({projectDetailsQuery.data.tasks.length})</p>
+                  <div className="mt-2 space-y-2">
+                    {projectDetailsQuery.data.tasks.map((task) => (
+                      <div key={task.id} className="text-sm text-zinc-700 flex items-start gap-2">
+                        <span className="text-zinc-400 mt-0.5">•</span>
+                        <span>{task.title}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
-          )}
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isEditing} onOpenChange={(open) => !open && resetForm()}>
+        <DialogContent className="w-2xl max-h-[90vh] min-h-0 overflow-hidden flex flex-col p-0 rounded-2xl border-zinc-200">
+          <DialogHeader className="p-6 border-b border-zinc-100 bg-zinc-50/50">
+            <DialogTitle className="text-xl font-bold">Edit Project</DialogTitle>
+            <DialogDescription>Update project details and status.</DialogDescription>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-y-auto p-6">
+            <form id="edit-project-form" onSubmit={handleUpdateProject} className="space-y-6">
+              <div className="space-y-2">
+                <Label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Project Title</Label>
+                <Input
+                  placeholder="e.g. Q3 Paid Media Launch"
+                  value={form.title}
+                  onChange={(e) => setForm((current) => ({ ...current, title: e.target.value }))}
+                  className="rounded-xl border-zinc-200 h-11"
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Description</Label>
+                <Input
+                  placeholder="Optional project notes..."
+                  value={form.description}
+                  onChange={(e) => setForm((current) => ({ ...current, description: e.target.value }))}
+                  className="rounded-xl border-zinc-200 h-11"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Status</Label>
+                <Select value={form.status} onValueChange={(value) => value && setForm((current) => ({ ...current, status: value }))}>
+                  <SelectTrigger className="rounded-xl border-zinc-200 h-11">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl shadow-xl">
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="paused">Paused</SelectItem>
+                    <SelectItem value="completed">Completed</SelectItem>
+                    <SelectItem value="archived">Archived</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </form>
+          </div>
+
+          <div className="p-6 border-t border-zinc-100 bg-white flex gap-3 justify-end">
+            <Button type="button" variant="ghost" onClick={resetForm} className="rounded-xl h-11 px-6">
+              Cancel
+            </Button>
+            <Button type="submit" form="edit-project-form" disabled={isSaving} className="bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl h-11 px-8">
+              {isSaving ? 'Saving...' : 'Update Project'}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 

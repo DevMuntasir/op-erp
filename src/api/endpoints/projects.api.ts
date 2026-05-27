@@ -1,10 +1,15 @@
 import { deleteApiData, getApiData, patchApiData, postApiData } from '@/src/api/client';
-import { Project, ProjectDeliverable, ProjectUpsertPayload } from '@/src/shared/types/domain';
+import { Project, ProjectDeliverable, ProjectUpsertPayload, Task, Client } from '@/src/shared/types/domain';
 
 export type CreateProjectRequest = Required<Pick<ProjectUpsertPayload, 'title'>> &
   Omit<ProjectUpsertPayload, 'title' | 'status'>;
 
 export type UpdateProjectRequest = ProjectUpsertPayload;
+
+export type ProjectDetails = Project & {
+  clients: Client[];
+  tasks: Task[];
+};
 
 const normalizeProject = (project: Partial<Project>): Project => ({
   id: typeof project.id === 'string' ? project.id : '',
@@ -17,6 +22,12 @@ const normalizeProject = (project: Partial<Project>): Project => ({
   name: project.name ?? project.title ?? '',
 });
 
+const normalizeProjectDetails = (project: Partial<ProjectDetails>): ProjectDetails => ({
+  ...normalizeProject(project),
+  clients: project.clients ?? [],
+  tasks: project.tasks ?? [],
+});
+
 export async function listProjects() {
   const data = await getApiData<Project[] | Project>('/v1/projects/');
   const items = Array.isArray(data) ? data : data ? [data] : [];
@@ -26,6 +37,11 @@ export async function listProjects() {
 export async function getProject(id: string) {
   const project = await getApiData<Project>(`/v1/projects/${id}`);
   return normalizeProject(project);
+}
+
+export async function getProjectDetails(id: string) {
+  const project = await getApiData<ProjectDetails>(`/v1/projects/${id}/details`);
+  return normalizeProjectDetails(project);
 }
 
 export async function createProject(body: CreateProjectRequest) {
@@ -45,4 +61,11 @@ export async function deleteProject(id: string) {
 
 export async function listProjectDeliverables(id: string) {
   return getApiData<ProjectDeliverable[]>(`/v1/projects/${id}/deliverables`);
+}
+
+export async function assignClientToProject(projectId: string, clientId: string) {
+  return postApiData<{ projectId: string; clientId: string }, { clientId: string }>(
+    `/v1/projects/${projectId}/clients`,
+    { clientId: clientId }
+  );
 }
