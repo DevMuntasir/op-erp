@@ -1,10 +1,13 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { collection, query, onSnapshot, addDoc, serverTimestamp, orderBy, where, limit, updateDoc, doc, writeBatch, getDoc } from 'firebase/firestore';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
+import { collection, query, onSnapshot, orderBy, where, limit, doc, getDoc, addDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
+import { useQuery } from '@tanstack/react-query';
 import { db, handleFirestoreError, OperationType } from '@/src/lib/firebase';
 import { isUserOnline, formatTimeHalifax, formatLastSeenHalifax } from '@/src/lib/presence';
 import { Message, User } from '@/src/types';
 import { logCallAutomatically } from '@/src/lib/calls';
 import { useAuth } from '@/src/App';
+import { listEmployees } from '@/src/api/endpoints/employees.api';
+import { listAdmins } from '@/src/api/endpoints/admins.api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
@@ -15,7 +18,6 @@ import { toast } from 'sonner';
 
 export const ChatSystem = () => {
   const { user } = useAuth();
-  const [chatPartners, setChatPartners] = useState<User[]>([]);
   const [selectedPartner, setSelectedPartner] = useState<User | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [messagesLoading, setMessagesLoading] = useState(false);
@@ -23,48 +25,34 @@ export const ChatSystem = () => {
   const [showListOnMobile, setShowListOnMobile] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const [loading, setLoading] = useState(true);
+  // Load employees and admins via API
+  const employeesQuery = useQuery({
+    queryKey: ['chat-partners-employees'],
+    queryFn: listEmployees,
+    enabled: !!user && user.role !== 'super_admin',
+  });
 
-  useEffect(() => {
-    if (!user?.role) {
-      console.log("ChatSystem: No user role yet, waiting...");
-      return;
-    }
-    
-    console.log("ChatSystem: Current user role:", user.role);
-    
-    let q;
+  const adminsQuery = useQuery({
+    queryKey: ['chat-partners-admins'],
+    queryFn: listAdmins,
+    enabled: !!user && user.role === 'super_admin',
+  });
+
+  // Compute chat partners based on role
+  const chatPartners = useMemo(() => {
+    if (!user) return [];
     if (user.role === 'super_admin') {
-      q = query(collection(db, 'profiles'), where('role', 'in', ['admin', 'employee']));
-    } else if (user.role === 'admin') {
-      q = query(collection(db, 'profiles'), where('adminId', '==', user.uid), where('role', '==', 'employee'));
-    } else if (user.adminId) {
-      // Employees see their admin and potentially colleagues
-      q = query(collection(db, 'profiles'), where('adminId', '==', user.adminId));
-    } else {
-      console.log("ChatSystem: Employee has no adminId yet, skipping query");
-      setLoading(false);
-      return;
+      // super_admin sees all admins and employees
+      return [
+        ...(adminsQuery.data ?? []),
+        ...(employeesQuery.data ?? []),
+      ].filter(p => p.uid !== user.uid);
     }
-    
-    console.log(`ChatSystem: Querying profiles for role-based access`);
-    
-    return onSnapshot(q, (snap) => {
-      console.log(`ChatSystem: Found ${snap.docs.length} users`);
-      const partners = snap.docs.map(doc => ({
-        uid: doc.id,
-        ...doc.data()
-      } as User));
-      console.log("ChatSystem: Partners found:", partners.map(p => p.email));
-      setChatPartners(partners);
-      setLoading(false);
-    }, (error) => {
-      console.error("ChatSystem: Profiles snapshot error:", error);
-      handleFirestoreError(error, OperationType.LIST, 'profiles');
-      toast.error("Failed to load chat partners");
-      setLoading(false);
-    });
-  }, [user]);
+    // admin sees their employees, employee sees colleagues
+    return (employeesQuery.data ?? []).filter(p => p.uid !== user.uid);
+  }, [user, employeesQuery.data, adminsQuery.data]);
+
+  const loading = employeesQuery.isLoading || adminsQuery.isLoading;
 
   useEffect(() => {
     if (!selectedPartner || !user) {
@@ -80,47 +68,28 @@ export const ChatSystem = () => {
     }
 
     setMessagesLoading(true);
-    
-    // Get primary IDs for the partner
-    const partnerIds = [partnerId, partnerEmail, partnerEmail?.toLowerCase()].filter(Boolean) as string[];
-    const uniquePartnerIds = Array.from(new Set(partnerIds));
 
-    console.log("ChatSystem: Querying messages where participants contains UID:", user.uid);
-    
-    // Query messages where the current user is a participant by their unique UID
-    // This is the most reliable way and matches the simplified security rules
+    // Build deterministic chatId
+    const pId = partnerId || partnerEmail.replace(/\./g, '_');
+    const chatId = [user.uid, pId].sort().join('_');
+
+    console.log("ChatSystem: Querying messages for chatId:", chatId);
+
+    // Query messages for this specific chat
     const q = query(
       collection(db, 'messages'),
-      where('participants', 'array-contains', user.uid),
+      where('chatId', '==', chatId),
+      orderBy('timestamp', 'asc'),
       limit(100)
     );
 
     const unsubscribe = onSnapshot(q, (snap) => {
-      console.log(`ChatSystem: Received ${snap.docs.length} candidate messages`);
-      
-      // Filter messages to only those involving the selected partner
-      const filteredMsgs = snap.docs
-        .map(doc => ({ id: doc.id, ...doc.data() } as Message))
-        .filter(msg => {
-          const participants = msg.participants || [];
-          // Check if any of the partner's possible IDs are in the participants list
-          return uniquePartnerIds.some(pId => participants.includes(pId));
-        });
+      console.log(`ChatSystem: Received ${snap.docs.length} messages`);
 
-      console.log(`ChatSystem: ${filteredMsgs.length} messages after filtering for partner`);
+      const msgs = snap.docs
+        .map(doc => ({ id: doc.id, ...doc.data() } as Message));
 
-      // Sort in-memory to avoid index requirement
-      const sortedMsgs = filteredMsgs.sort((a, b) => {
-        const getTime = (ts: any) => {
-          if (!ts) return Date.now() + 10000;
-          if (typeof ts.toMillis === 'function') return ts.toMillis();
-          if (ts.seconds) return ts.seconds * 1000;
-          return 0;
-        };
-        return getTime(a.timestamp) - getTime(b.timestamp);
-      });
-      
-      setMessages(sortedMsgs);
+      setMessages(msgs);
       setMessagesLoading(false);
 
       // Mark unread messages from partner as seen
@@ -133,7 +102,7 @@ export const ChatSystem = () => {
       if (unreadFromPartner.length > 0) {
         const batch = writeBatch(db);
         unreadFromPartner.forEach(d => {
-          batch.update(d.ref, { 
+          batch.update(d.ref, {
             status: 'seen',
             seenAt: serverTimestamp()
           });
@@ -162,12 +131,12 @@ export const ChatSystem = () => {
 
     const partnerId = selectedPartner.uid;
     const partnerEmail = selectedPartner.email;
-    
+
     // Use UID if available, otherwise fallback to email-based ID
     const myId = user.uid;
     const pId = partnerId || partnerEmail.replace(/\./g, '_');
     const chatId = [myId, pId].sort().join('_');
-    
+
     const msg = newMessage;
     setNewMessage('');
 
