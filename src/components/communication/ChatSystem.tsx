@@ -38,6 +38,25 @@ export const ChatSystem = () => {
     enabled: !!user && user.role === 'super_admin',
   });
 
+  // For employees, also fetch their admin from Firestore
+  const [adminForEmployee, setAdminForEmployee] = useState<User | null>(null);
+  useEffect(() => {
+    if (!user || user.role !== 'employee' || !user.adminId) return;
+
+    const fetchAdmin = async () => {
+      try {
+        const adminDoc = await getDoc(doc(db, 'profiles', user.adminId!));
+        if (adminDoc.exists()) {
+          setAdminForEmployee({ uid: adminDoc.id, ...adminDoc.data() } as User);
+        }
+      } catch (error) {
+        console.error("Error fetching admin:", error);
+      }
+    };
+
+    fetchAdmin();
+  }, [user]);
+
   // Compute chat partners based on role
   const chatPartners = useMemo(() => {
     if (!user) return [];
@@ -48,9 +67,14 @@ export const ChatSystem = () => {
         ...(employeesQuery.data ?? []),
       ].filter(p => p.uid !== user.uid);
     }
-    // admin sees their employees, employee sees colleagues
-    return (employeesQuery.data ?? []).filter(p => p.uid !== user.uid);
-  }, [user, employeesQuery.data, adminsQuery.data]);
+    // admin sees their employees
+    if (user.role === 'admin') {
+      return (employeesQuery.data ?? []).filter(p => p.uid !== user.uid);
+    }
+    // employee sees colleagues + their admin
+    const colleagues = (employeesQuery.data ?? []).filter(p => p.uid !== user.uid);
+    return adminForEmployee ? [...colleagues, adminForEmployee] : colleagues;
+  }, [user, employeesQuery.data, adminsQuery.data, adminForEmployee]);
 
   const loading = employeesQuery.isLoading || adminsQuery.isLoading;
 
