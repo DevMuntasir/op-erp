@@ -10,10 +10,11 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Phone, Mail, User, Edit2, Trash2, Search, Filter, MapPin, ClipboardList, Globe } from 'lucide-react';
+import { Plus, Phone, Mail, User, Edit2, Trash2, Search, Filter, ClipboardList, Globe } from 'lucide-react';
 import { toast } from 'sonner';
 import { CallLoggerDialog } from '@/src/components/calls/CallLogger';
 import { ConfirmDialog } from '@/src/components/shared/dialogs/ConfirmDialog';
+import { FormattedAddress } from '@/src/components/shared/FormattedAddress';
 import { logCallAutomatically } from '@/src/lib/calls';
 import { createLead, deleteLead, listLeads, updateLead } from '@/src/api/endpoints/leads.api';
 import type { CreateLeadRequest, UpdateLeadRequest } from '@/src/api/endpoints/leads.api';
@@ -381,12 +382,7 @@ export const LeadManagement = () => {
                         {lead.email}
                       </div>
                     )}
-                    {(lead.location || lead.address) && (
-                      <div className="flex items-center gap-2 text-sm text-zinc-600">
-                        <MapPin className="w-4 h-4" />
-                        {lead.location || lead.address}
-                      </div>
-                    )}
+                    {(lead.location || lead.address) && <FormattedAddress address={lead.location || lead.address} />}
                     {lead.website && (
                       <a href={lead.website} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-sm text-emerald-600 hover:text-emerald-700">
                         <Globe className="w-4 h-4" />

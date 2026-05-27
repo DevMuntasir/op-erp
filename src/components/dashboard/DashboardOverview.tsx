@@ -24,7 +24,7 @@ const formatCurrency = (value: number) =>
 export const DashboardOverview = () => {
   const { user } = useAuth();
   const location = useLocation();
-  const isDashboardPage = location.pathname.includes('/dashboard') || location.pathname.match(/\/(admin|super-admin|employee)$/);
+  const isDashboardPage = location.pathname.includes('/dashboard') || !!location.pathname.match(/\/(admin|super-admin|employee)$/);
 
   const employeesQuery = useQuery({
     queryKey: queryKeys.employees,
@@ -44,7 +44,7 @@ export const DashboardOverview = () => {
     queryKey: queryKeys.sessions({ dashboard: true }),
     queryFn: listSessions,
     enabled: !!user && isDashboardPage,
-    refetchInterval: isDashboardPage ? 10_000 : undefined,
+    refetchInterval: isDashboardPage ? 10_000 : false,
   });
 
   const screenshotsQuery = useQuery({
