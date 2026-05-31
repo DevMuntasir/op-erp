@@ -13,8 +13,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { ConfirmDialog } from '@/src/components/shared/dialogs/ConfirmDialog';
 import { deleteProject, getProjectDetails, listProjects, updateProject, assignClientToProject } from '@/src/api/endpoints/projects.api';
 import type { UpdateProjectRequest, ProjectDetails } from '@/src/api/endpoints/projects.api';
-import { listClients } from '@/src/api/endpoints/clients.api';
-import { listEmployees } from '@/src/api/endpoints/employees.api';
+import { listClients, createClient } from '@/src/api/endpoints/clients.api';
+import { listEmployees, createInvite } from '@/src/api/endpoints/employees.api';
 import { createTask } from '@/src/api/endpoints/tasks.api';
 import { useAuth } from '@/src/App';
 import { queryKeys } from '@/src/shared/constants/query-keys';
@@ -39,6 +39,22 @@ type TaskFormState = {
   dueDate: string;
 };
 
+type CreateClientFormState = {
+  name: string;
+  email: string;
+  password: string;
+  phone: string;
+  company: string;
+  status: string;
+};
+
+type CreateEmployeeFormState = {
+  email: string;
+  name: string;
+  inviteType: 'invitation' | 'password';
+  password: string;
+};
+
 const initialFormState = (): ProjectFormState => ({
   title: '',
   description: '',
@@ -51,6 +67,22 @@ const initialTaskFormState = (): TaskFormState => ({
   assignedTo: '',
   priority: 'medium',
   dueDate: '',
+});
+
+const initialCreateClientFormState = (): CreateClientFormState => ({
+  name: '',
+  email: '',
+  password: '',
+  phone: '',
+  company: '',
+  status: 'active',
+});
+
+const initialCreateEmployeeFormState = (): CreateEmployeeFormState => ({
+  email: '',
+  name: '',
+  inviteType: 'invitation',
+  password: '',
 });
 
 const editSteps: { id: EditStep; label: string; description: string }[] = [
@@ -114,6 +146,10 @@ export const ProjectManagement = () => {
   const [form, setForm] = useState<ProjectFormState>(initialFormState);
   const [taskForm, setTaskForm] = useState<TaskFormState>(initialTaskFormState);
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
+  const [showCreateClient, setShowCreateClient] = useState(false);
+  const [createClientForm, setCreateClientForm] = useState<CreateClientFormState>(initialCreateClientFormState);
+  const [showCreateEmployee, setShowCreateEmployee] = useState(false);
+  const [createEmployeeForm, setCreateEmployeeForm] = useState<CreateEmployeeFormState>(initialCreateEmployeeFormState);
 
   const projectsQuery = useQuery({
     queryKey: queryKeys.projects({ scope: user?.role ?? 'anonymous' }),
@@ -203,6 +239,36 @@ export const ProjectManagement = () => {
     },
   });
 
+  const createClientMutation = useMutation({
+    mutationFn: (clientData: Parameters<typeof createClient>[0]) => createClient(clientData),
+    onSuccess: (newClient) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.clients() });
+      toast.success('Client created successfully');
+      setShowCreateClient(false);
+      setCreateClientForm(initialCreateClientFormState());
+      setSelectedClientId(newClient.id);
+      if (editingProject) {
+        handleSelectClient(newClient.id);
+      }
+    },
+    onError: (error: Error) => {
+      toast.error('Failed to create client', { description: error.message });
+    },
+  });
+
+  const createEmployeeMutation = useMutation({
+    mutationFn: (inviteData: Parameters<typeof createInvite>[0]) => createInvite(inviteData as any),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.employees });
+      toast.success('Employee invited successfully');
+      setShowCreateEmployee(false);
+      setCreateEmployeeForm(initialCreateEmployeeFormState());
+    },
+    onError: (error: Error) => {
+      toast.error('Failed to invite employee', { description: error.message });
+    },
+  });
+
   const handleUpdateProject = async (e: React.FormEvent, nextStep?: EditStep) => {
     e.preventDefault();
 
@@ -261,6 +327,56 @@ export const ProjectManagement = () => {
       priority: taskForm.priority,
       dueDate: dueDate,
     });
+  };
+
+  const handleCreateClientSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!createClientForm.name.trim()) {
+      toast.error('Client name is required');
+      return;
+    }
+
+    if (!createClientForm.email.trim()) {
+      toast.error('Client email is required');
+      return;
+    }
+
+    await createClientMutation.mutateAsync({
+      name: createClientForm.name.trim(),
+      email: createClientForm.email.trim(),
+      password: createClientForm.password.trim() || undefined,
+      phone: createClientForm.phone.trim() || undefined,
+      company: createClientForm.company.trim() || undefined,
+      status: createClientForm.status.trim(),
+    });
+  };
+
+  const handleCreateEmployeeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!createEmployeeForm.name.trim()) {
+      toast.error('Employee name is required');
+      return;
+    }
+
+    if (!createEmployeeForm.email.trim()) {
+      toast.error('Employee email is required');
+      return;
+    }
+
+    if (createEmployeeForm.inviteType === 'password' && !createEmployeeForm.password.trim()) {
+      toast.error('Password is required when using password mode');
+      return;
+    }
+
+    await createEmployeeMutation.mutateAsync({
+      email: createEmployeeForm.email.trim(),
+      role: 'employee',
+      name: createEmployeeForm.name.trim(),
+      type: createEmployeeForm.inviteType,
+      password: createEmployeeForm.password.trim() || undefined,
+    } as any);
   };
 
   const handleDeleteProject = async () => {
@@ -610,14 +726,14 @@ export const ProjectManagement = () => {
                       type="button"
                       variant="ghost"
                       onClick={() => setEditStep('client')}
-                      className="flex-1 rounded-xl h-11"
+                      size="sm"
                     >
                       Skip
                     </Button>
                     <Button
                       type="submit"
                       disabled={isSaving}
-                      className="flex-1 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl h-11"
+                      size="sm"
                     >
                       {isSaving ? 'Saving...' : 'Save & Next →'}
                     </Button>
@@ -641,6 +757,96 @@ export const ProjectManagement = () => {
                         ))}
                       </div>
                     </div>
+                  )}
+
+                  {showCreateClient ? (
+                    <div className="rounded-xl border border-zinc-200 bg-zinc-50/50 p-4 space-y-3">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Create New Client</p>
+                      <form onSubmit={handleCreateClientSubmit} className="space-y-3">
+                        <div className="space-y-1">
+                          <Label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Name *</Label>
+                          <Input
+                            placeholder="Client name"
+                            value={createClientForm.name}
+                            onChange={(e) => setCreateClientForm((current) => ({ ...current, name: e.target.value }))}
+                            className="rounded-lg border-zinc-200 h-9 text-sm"
+                            required
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <Label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Email *</Label>
+                          <Input
+                            type="email"
+                            placeholder="client@example.com"
+                            value={createClientForm.email}
+                            onChange={(e) => setCreateClientForm((current) => ({ ...current, email: e.target.value }))}
+                            className="rounded-lg border-zinc-200 h-9 text-sm"
+                            required
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <Label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Password</Label>
+                          <Input
+                            type="password"
+                            placeholder="Password"
+                            value={createClientForm.password}
+                            onChange={(e) => setCreateClientForm((current) => ({ ...current, password: e.target.value }))}
+                            className="rounded-lg border-zinc-200 h-9 text-sm"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="space-y-1">
+                            <Label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Phone</Label>
+                            <Input
+                              placeholder="Phone"
+                              value={createClientForm.phone}
+                              onChange={(e) => setCreateClientForm((current) => ({ ...current, phone: e.target.value }))}
+                              className="rounded-lg border-zinc-200 h-9 text-sm"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <Label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Company</Label>
+                            <Input
+                              placeholder="Company"
+                              value={createClientForm.company}
+                              onChange={(e) => setCreateClientForm((current) => ({ ...current, company: e.target.value }))}
+                              className="rounded-lg border-zinc-200 h-9 text-sm"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex gap-2 pt-2">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            onClick={() => setShowCreateClient(false)}
+                            className="flex-1 rounded-lg h-9 text-sm"
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            type="submit"
+                            disabled={createClientMutation.isPending}
+                            className="flex-1 bg-zinc-900 hover:bg-zinc-800 text-white rounded-lg h-9 text-sm"
+                          >
+                            {createClientMutation.isPending ? 'Creating...' : 'Create & Assign'}
+                          </Button>
+                        </div>
+                      </form>
+                    </div>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setShowCreateClient(true)}
+                      className="w-full rounded-xl h-11 border-zinc-200 text-zinc-900"
+                    >
+                      ＋ Create New Client
+                    </Button>
                   )}
 
                   <div>
@@ -771,7 +977,17 @@ export const ProjectManagement = () => {
 
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
-                          <Label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Assign To *</Label>
+                          <div className="flex items-center justify-between gap-2">
+                            <Label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Assign To *</Label>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              onClick={() => setShowCreateEmployee(!showCreateEmployee)}
+                              className="h-6 px-2 text-xs rounded-lg text-zinc-500 hover:text-zinc-700"
+                            >
+                              ＋ Invite
+                            </Button>
+                          </div>
                           <Select
                             value={taskForm.assignedTo}
                             onValueChange={(value) => setTaskForm((prev) => ({ ...prev, assignedTo: value }))}
@@ -824,6 +1040,95 @@ export const ProjectManagement = () => {
                           className="rounded-xl border-zinc-200 h-11"
                         />
                       </div>
+
+                      {showCreateEmployee && (
+                        <div className="rounded-xl border border-zinc-200 bg-zinc-50/50 p-4 space-y-3">
+                          <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Invite New Employee</p>
+
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-2 rounded-lg bg-white border border-zinc-100 p-2">
+                              <button
+                                type="button"
+                                onClick={() => setCreateEmployeeForm((prev) => ({ ...prev, inviteType: 'invitation' }))}
+                                className={`flex-1 text-xs font-semibold px-3 py-2 rounded-lg transition-all ${
+                                  createEmployeeForm.inviteType === 'invitation'
+                                    ? 'bg-zinc-900 text-white'
+                                    : 'text-zinc-600 hover:bg-zinc-50'
+                                }`}
+                              >
+                                Invitation
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setCreateEmployeeForm((prev) => ({ ...prev, inviteType: 'password' }))}
+                                className={`flex-1 text-xs font-semibold px-3 py-2 rounded-lg transition-all ${
+                                  createEmployeeForm.inviteType === 'password'
+                                    ? 'bg-zinc-900 text-white'
+                                    : 'text-zinc-600 hover:bg-zinc-50'
+                                }`}
+                              >
+                                Password
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="space-y-1">
+                            <Label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Name *</Label>
+                            <Input
+                              placeholder="Employee name"
+                              value={createEmployeeForm.name}
+                              onChange={(e) => setCreateEmployeeForm((prev) => ({ ...prev, name: e.target.value }))}
+                              className="rounded-lg border-zinc-200 h-9 text-sm"
+                              required
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <Label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Email *</Label>
+                            <Input
+                              type="email"
+                              placeholder="employee@example.com"
+                              value={createEmployeeForm.email}
+                              onChange={(e) => setCreateEmployeeForm((prev) => ({ ...prev, email: e.target.value }))}
+                              className="rounded-lg border-zinc-200 h-9 text-sm"
+                              required
+                            />
+                          </div>
+
+                          {createEmployeeForm.inviteType === 'password' && (
+                            <div className="space-y-1">
+                              <Label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Password *</Label>
+                              <Input
+                                type="password"
+                                placeholder="Set password"
+                                value={createEmployeeForm.password}
+                                onChange={(e) => setCreateEmployeeForm((prev) => ({ ...prev, password: e.target.value }))}
+                                className="rounded-lg border-zinc-200 h-9 text-sm"
+                                required
+                              />
+                            </div>
+                          )}
+
+                          <div className="flex gap-2 pt-2">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              onClick={() => setShowCreateEmployee(false)}
+                              className="flex-1 rounded-lg h-9 text-sm"
+                            >
+                              Cancel
+                            </Button>
+                            <Button
+                              type="button"
+                              onClick={handleCreateEmployeeSubmit}
+                              disabled={createEmployeeMutation.isPending}
+                              className="flex-1 bg-zinc-900 hover:bg-zinc-800 text-white rounded-lg h-9 text-sm"
+                            >
+                              {createEmployeeMutation.isPending ? 'Creating...' : createEmployeeForm.inviteType === 'invitation' ? 'Send Invite' : 'Create Account'}
+                            </Button>
+                          </div>
+                        </div>
+                      )}
 
                       <div className="flex gap-3 pt-4">
                         <Button
