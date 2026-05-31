@@ -65,92 +65,131 @@ export const ProposalPreview = () => {
 
   const handleExportPDF = async () => {
     if (!documentRef.current || !proposal) return;
-    
+
     setExporting(true);
     const toastId = toast.loading("Generating optimized PDF document...");
     const originalScrollY = window.scrollY;
-    
+
     try {
       const element = documentRef.current;
-      
-      // Safety check for dimensions to prevent createPattern error
+
       if (!element || element.offsetWidth === 0 || element.offsetHeight === 0) {
         toast.error("The document is currently hidden or has no size. Please ensure it is visible before exporting.", { id: toastId });
         setExporting(false);
         return;
       }
-      
-      // 1. Capture the document with a fixed width for A4 consistency
+
       window.scrollTo(0, 0);
-      
-      // Delay to ensure any pending layouts settle
       await new Promise(resolve => setTimeout(resolve, 500));
 
       const canvas = await html2canvas(element, {
-        scale: 1.5,
+        scale: 2,
         useCORS: true,
         allowTaint: true,
         backgroundColor: '#ffffff',
         imageTimeout: 30000,
         logging: false,
-        ignoreElements: (el) => {
-          // Skip elements that are effectively invisible or have 0 dimensions
-          if (el instanceof HTMLElement) {
-            const style = window.getComputedStyle(el);
-            if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return true;
-            
-            // Specifically skip images/canvases/svgs with 0 dimensions
-            if (el.tagName === 'CANVAS' || el.tagName === 'IMG' || el.tagName === 'SVG') {
-              if (el.offsetWidth === 0 || el.offsetHeight === 0) return true;
-            }
-          }
-          return false;
-        },
         onclone: (clonedDoc) => {
-          const clonedElement = clonedDoc.querySelector('.proposal-capture') as HTMLElement;
-          if (clonedElement) {
-            clonedElement.style.width = '1000px';
-            clonedElement.style.maxWidth = '1000px';
-            clonedElement.style.padding = '60px';
-            clonedElement.style.margin = '0 auto';
-            clonedElement.style.backgroundColor = '#ffffff';
-            clonedElement.style.boxShadow = 'none';
-          }
-
-          // Force remove all oklch and oklab usages from ANY style tag
-          const styleTags = Array.from(clonedDoc.getElementsByTagName('style'));
-          const brandHex = '#ff00cc'; // Exact hsl(312 100% 50%) conversion
+          const brandHex = '#ff00cc';
           const zincHex = '#18181b';
-          
+
+          // Inject critical styles to fix layout for PDF
+          const fixStyle = clonedDoc.createElement('style');
+          fixStyle.innerHTML = `
+            html, body {
+              width: 100% !important;
+              max-width: none !important;
+              margin: 0 !important;
+              padding: 0 !important;
+              background: white !important;
+            }
+
+            /* Remove max-width constraint that breaks layout */
+            .max-w-\\[21cm\\] { max-width: none !important; width: 100% !important; }
+
+            /* Ensure grid layouts work */
+            .grid { display: grid !important; }
+            .grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+            .grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+            .grid-cols-5 { grid-template-columns: repeat(5, minmax(0, 1fr)) !important; }
+            .gap-12 { gap: 3rem !important; }
+            .gap-16 { gap: 4rem !important; }
+
+            /* Ensure flex containers work */
+            .flex { display: flex !important; }
+            .flex-col { flex-direction: column !important; }
+            .flex-row { flex-direction: row !important; }
+            .items-center { align-items: center !important; }
+            .items-end { align-items: flex-end !important; }
+            .items-start { align-items: flex-start !important; }
+            .justify-center { justify-content: center !important; }
+            .justify-between { justify-content: space-between !important; }
+
+            /* Width and sizing */
+            .w-full { width: 100% !important; }
+            .w-auto { width: auto !important; }
+            .max-w-none { max-width: none !important; }
+            .max-w-6xl { max-width: 72rem !important; }
+            .max-w-4xl { max-width: 56rem !important; }
+            .max-w-3xl { max-width: 48rem !important; }
+            .max-w-2xl { max-width: 42rem !important; }
+            .mx-auto { margin-left: auto !important; margin-right: auto !important; }
+
+            /* Responsive text sizes */
+            .text-2xl { font-size: 1.5rem !important; }
+            .text-3xl { font-size: 1.875rem !important; }
+            .text-4xl { font-size: 2.25rem !important; }
+            .text-5xl { font-size: 3rem !important; }
+            .text-6xl { font-size: 3.75rem !important; }
+            .text-7xl { font-size: 4.5rem !important; }
+            .text-\\[90px\\] { font-size: 5.625rem !important; }
+            .text-\\[10px\\] { font-size: 0.625rem !important; }
+            .text-xs { font-size: 0.75rem !important; }
+            .text-sm { font-size: 0.875rem !important; }
+            .text-base { font-size: 1rem !important; }
+            .text-lg { font-size: 1.125rem !important; }
+
+            /* Spacing */
+            .px-6 { padding-left: 1.5rem !important; padding-right: 1.5rem !important; }
+            .px-8 { padding-left: 2rem !important; padding-right: 2rem !important; }
+            .px-12 { padding-left: 3rem !important; padding-right: 3rem !important; }
+            .px-16 { padding-left: 4rem !important; padding-right: 4rem !important; }
+            .py-8 { padding-top: 2rem !important; padding-bottom: 2rem !important; }
+            .py-10 { padding-top: 2.5rem !important; padding-bottom: 2.5rem !important; }
+            .py-14 { padding-top: 3.5rem !important; padding-bottom: 3.5rem !important; }
+            .py-16 { padding-top: 4rem !important; padding-bottom: 4rem !important; }
+            .py-20 { padding-top: 5rem !important; padding-bottom: 5rem !important; }
+            .py-24 { padding-top: 6rem !important; padding-bottom: 6rem !important; }
+            .py-32 { padding-top: 8rem !important; padding-bottom: 8rem !important; }
+            .py-40 { padding-top: 10rem !important; padding-bottom: 10rem !important; }
+
+            .space-y-4 > * + * { margin-top: 1rem !important; }
+            .space-y-5 > * + * { margin-top: 1.25rem !important; }
+            .space-y-7 > * + * { margin-top: 1.75rem !important; }
+            .space-y-16 > * + * { margin-top: 4rem !important; }
+            .space-y-20 > * + * { margin-top: 5rem !important; }
+            .space-y-24 > * + * { margin-top: 6rem !important; }
+            .space-y-28 > * + * { margin-top: 7rem !important; }
+          `;
+          clonedDoc.head.appendChild(fixStyle);
+
+          // Fix color styles
+          const styleTags = Array.from(clonedDoc.getElementsByTagName('style'));
           styleTags.forEach(tag => {
             try {
               let css = tag.innerHTML;
-              
-              // Filter out modern CSS functions that html2canvas cannot parse
-              for (let i = 0; i < 3; i++) { 
+              for (let i = 0; i < 3; i++) {
                 css = css.replace(/(oklch|oklab|lab|lch|color|color-mix|light-dark)\s*\((?:[^()]*|\((?:[^()]*|\([^()]*\))*\))*\)/gi, zincHex);
               }
-
-              // NEW: Catch interpolation hints in gradients like "linear-gradient(in oklab, ...)"
               css = css.replace(/in\s+(oklb|oklch|oklab|oklab-linear|oklch-linear|lab|lch|srgb-linear|display-p3|a98-rgb|prophoto-rgb|rec2020|xyz|xyz-d50|xyz-d65)/gi, "in srgb");
-              
               tag.innerHTML = css;
             } catch (e) {
               console.warn('Could not modify style tag', e);
             }
           });
 
-          // Inject safe fallbacks for root variables
           const rootStyle = clonedDoc.createElement('style');
           rootStyle.innerHTML = `
-            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
-            @font-face {
-              font-family: 'Geist Variable';
-              src: url('https://cdn.jsdelivr.net/npm/@fontsource-variable/geist/files/geist-latin-wght-normal.woff2') format('woff2-variations');
-              font-weight: 100 900;
-              font-display: swap;
-              font-style: normal;
-            }
             :root {
               --zinc-50: #fafafa !important;
               --zinc-100: #f4f4f5 !important;
@@ -165,103 +204,40 @@ export const ProposalPreview = () => {
               --zinc-950: #09090b !important;
               --brand: ${brandHex} !important;
               --color-brand: ${brandHex} !important;
-              --background: #ffffff !important;
-              --foreground: #09090b !important;
             }
-            * { 
-              font-family: 'Geist Variable', 'Inter', -apple-system, sans-serif !important;
+            * {
               -webkit-print-color-adjust: exact !important;
-              color-scheme: light !important;
-              letter-spacing: -0.015em !important;
-              text-rendering: optimizeLegibility !important;
-              box-shadow: none !important;
-              text-shadow: none !important;
+              print-color-adjust: exact !important;
             }
-            h1, h2, h3, h4, h5, h6, strong, b {
-              font-weight: 900 !important;
-              letter-spacing: -0.04em !important;
-              color: #18181b !important;
-            }
-            .text-zinc-900 { color: #18181b !important; }
-            .text-zinc-500 { color: #71717a !important; }
-            .text-zinc-400 { color: #a1a1aa !important; }
-            .bg-zinc-50 { background-color: #fafafa !important; }
-            .bg-zinc-100 { background-color: #f4f4f5 !important; }
-            .bg-zinc-900 { background-color: #18181b !important; }
-            .text-brand { color: ${brandHex} !important; }
-            .bg-brand { background-color: ${brandHex} !important; }
-            .border-brand { border-color: ${brandHex} !important; }
           `;
-          const head = clonedDoc.head || clonedDoc.getElementsByTagName('head')[0];
-          if (head) {
-            head.appendChild(rootStyle);
-          } else {
-            clonedDoc.documentElement.appendChild(rootStyle);
-          }
+          clonedDoc.head.appendChild(rootStyle);
 
-          // Force all elements to use standard colors and fix spacing issues
+          // Remove elements that break the layout
           const allElements = Array.from(clonedDoc.getElementsByTagName('*'));
           for (let i = 0; i < allElements.length; i++) {
             const el = allElements[i] as HTMLElement;
 
-            // Force remove zero-dimension elements that crash html2canvas
             if (el.tagName === 'CANVAS' || el.tagName === 'IMG' || el.tagName === 'SVG') {
                 const w = el.offsetWidth || parseInt(el.getAttribute('width') || '0');
                 const h = el.offsetHeight || parseInt(el.getAttribute('height') || '0');
                 if (w === 0 || h === 0) {
                   el.style.display = 'none';
-                  el.setAttribute('data-html2canvas-ignore', 'true');
                 }
             }
-            
-            // Scrub inline style attribute specifically
+
             const inlineStyle = el.getAttribute('style');
-            if (inlineStyle && (inlineStyle.includes('oklch') || inlineStyle.includes('oklab') || inlineStyle.includes('color(') || inlineStyle.includes('color-mix') || inlineStyle.includes('light-dark'))) {
+            if (inlineStyle && (inlineStyle.includes('oklch') || inlineStyle.includes('oklab'))) {
               let newStyle = inlineStyle;
               for (let j = 0; j < 3; j++) {
                 newStyle = newStyle.replace(/(oklch|oklab|lab|lch|color|color-mix|light-dark)\s*\((?:[^()]*|\((?:[^()]*|\([^()]*\))*\))*\)/gi, zincHex);
               }
               el.setAttribute('style', newStyle);
             }
-
-            el.style.letterSpacing = '0px';
-            el.style.wordSpacing = 'normal';
-            el.style.setProperty('-webkit-font-smoothing', 'antialiased');
-
-            // Force inline styles if they use oklab
-            const colorProps = ['color', 'backgroundColor', 'borderColor', 'outlineColor', 'fill', 'stroke', 'boxShadow', 'textShadow'];
-            colorProps.forEach(prop => {
-              const style = window.getComputedStyle(el);
-              const val = (el.style as any)[prop] || (style as any)[prop];
-              
-              if (val && (typeof val === 'string') && (val.includes('oklch') || val.includes('oklab') || val.includes('color(') || val.includes('color-mix') || val.includes('light-dark') || val.includes(' in '))) {
-                if (prop === 'backgroundColor') {
-                  if (val.includes('0.98') || val.includes('98%')) el.style.setProperty('background-color', '#fafafa', 'important');
-                  else if (el.classList.contains('bg-brand')) el.style.setProperty('background-color', brandHex, 'important');
-                  else el.style.setProperty('background-color', '#ffffff', 'important');
-                } else if (prop === 'boxShadow' || prop === 'textShadow') {
-                  el.style.setProperty(prop, 'none', 'important');
-                } else if (prop === 'color') {
-                  if (el.classList.contains('text-brand')) el.style.setProperty('color', brandHex, 'important');
-                  else el.style.setProperty('color', zincHex, 'important');
-                } else {
-                  if (el.classList.contains('border-brand')) el.style.setProperty(prop, brandHex, 'important');
-                  else el.style.setProperty(prop, zincHex, 'important');
-                }
-              }
-            });
-
-            // Strip backgrounds that use interpolation hints
-            if (el.style.backgroundImage && (el.style.backgroundImage.includes('oklch') || el.style.backgroundImage.includes('oklab') || el.style.backgroundImage.includes('color(') || el.style.backgroundImage.includes('color-mix'))) {
-              el.style.backgroundImage = 'none';
-            }
           }
         }
-
       });
 
-      // 2. Dynamic PDF Sizing based on content length
-      const pdfWidth = 210; // A4 width in mm
+      const pdfWidth = 210;
       const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
 
       const pdf = new jsPDF({
@@ -271,8 +247,8 @@ export const ProposalPreview = () => {
         compress: true
       });
 
-      const imgData = canvas.toDataURL('image/jpeg', 0.75);
-      pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight, undefined, 'FAST');
+      const imgData = canvas.toDataURL('image/jpeg', 0.85);
+      pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
 
       pdf.save(`OP_Media_${proposal.clientName.replace(/\s+/g, '_')}_Strategic_Proposal.pdf`);
       toast.success("Professional PDF Generated!", { id: toastId });
@@ -334,10 +310,11 @@ export const ProposalPreview = () => {
       <div className="w-full max-w-[21cm] mx-auto mt-8 print:mt-0 shadow-2xl print:shadow-none px-0 sm:px-4 md:px-0">
         <div
           ref={documentRef}
-          className="bg-white flex flex-col relative overflow-hidden font-sans min-h-screen"
+          className="bg-white flex flex-col relative overflow-visible font-sans w-full"
+          style={{ minHeight: '100vh' }}
         >
           {/* SEAMLESS CONTENT CONTAINER */}
-          <div className="relative z-10 w-full flex flex-col space-y-28 px-6 py-16 md:px-16 md:py-32">
+          <div className="relative z-10 w-full flex flex-col space-y-24 px-8 py-16 md:px-16 md:py-24">
             
             {/* COVER SECTION */}
             <div className="flex flex-col">
