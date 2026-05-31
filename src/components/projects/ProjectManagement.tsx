@@ -8,15 +8,22 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Textarea } from '@/components/ui/textarea';
 import { ConfirmDialog } from '@/src/components/shared/dialogs/ConfirmDialog';
-import { deleteProject, getProjectDetails, listProjects, updateProject } from '@/src/api/endpoints/projects.api';
+import { deleteProject, getProjectDetails, listProjects, updateProject, assignClientToProject } from '@/src/api/endpoints/projects.api';
 import type { UpdateProjectRequest, ProjectDetails } from '@/src/api/endpoints/projects.api';
+import { listClients } from '@/src/api/endpoints/clients.api';
+import { listEmployees } from '@/src/api/endpoints/employees.api';
+import { createTask } from '@/src/api/endpoints/tasks.api';
 import { useAuth } from '@/src/App';
 import { queryKeys } from '@/src/shared/constants/query-keys';
 import { Project } from '@/src/types';
-import { Edit2, Eye, FolderKanban, Plus, Search, Trash2 } from 'lucide-react';
+import { Edit2, Eye, FolderKanban, Plus, Search, Trash2, Check, Mail, Building2, Phone, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { ProjectCreationWizard } from './ProjectCreationWizard';
+
+type EditStep = 'details' | 'client' | 'employees';
 
 type ProjectFormState = {
   title: string;
@@ -24,11 +31,33 @@ type ProjectFormState = {
   status: string;
 };
 
+type TaskFormState = {
+  title: string;
+  description: string;
+  assignedTo: string;
+  priority: 'low' | 'medium' | 'high';
+  dueDate: string;
+};
+
 const initialFormState = (): ProjectFormState => ({
   title: '',
   description: '',
   status: 'active',
 });
+
+const initialTaskFormState = (): TaskFormState => ({
+  title: '',
+  description: '',
+  assignedTo: '',
+  priority: 'medium',
+  dueDate: '',
+});
+
+const editSteps: { id: EditStep; label: string; description: string }[] = [
+  { id: 'details', label: 'Project Details', description: 'Basic info' },
+  { id: 'client', label: 'Assign Client', description: 'Optional' },
+  { id: 'employees', label: 'Create Task', description: 'Task assignment' },
+];
 
 const toProjectUpdatePayload = (form: ProjectFormState): UpdateProjectRequest => {
   const payload: UpdateProjectRequest = {
@@ -78,10 +107,13 @@ export const ProjectManagement = () => {
   const [isWizardOpen, setIsWizardOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [editStep, setEditStep] = useState<EditStep>('details');
   const [deletingProject, setDeletingProject] = useState<Project | null>(null);
   const [viewingProject, setViewingProject] = useState<Project | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [form, setForm] = useState<ProjectFormState>(initialFormState);
+  const [taskForm, setTaskForm] = useState<TaskFormState>(initialTaskFormState);
+  const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
 
   const projectsQuery = useQuery({
     queryKey: queryKeys.projects({ scope: user?.role ?? 'anonymous' }),
@@ -95,8 +127,29 @@ export const ProjectManagement = () => {
     enabled: !!viewingProject,
   });
 
+  const editProjectDetailsQuery = useQuery({
+    queryKey: ['edit-project-details', editingProject?.id],
+    queryFn: () => editingProject ? getProjectDetails(editingProject.id) : null,
+    enabled: !!editingProject && isEditing,
+  });
+
+  const clientsQuery = useQuery({
+    queryKey: queryKeys.clients(),
+    queryFn: listClients,
+    enabled: !!user && isEditing && editStep === 'client',
+  });
+
+  const employeesQuery = useQuery({
+    queryKey: queryKeys.employees,
+    queryFn: listEmployees,
+    enabled: !!user && isEditing && editStep === 'employees',
+  });
+
   const resetForm = () => {
     setForm(initialFormState());
+    setTaskForm(initialTaskFormState());
+    setSelectedClientId(null);
+    setEditStep('details');
     setEditingProject(null);
     setIsEditing(false);
   };
@@ -125,7 +178,32 @@ export const ProjectManagement = () => {
     },
   });
 
-  const handleUpdateProject = async (e: React.FormEvent) => {
+  const assignClientMutation = useMutation({
+    mutationFn: (clientId: string) => assignClientToProject(editingProject!.id, clientId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['edit-project-details', editingProject?.id] });
+      setEditStep('employees');
+      toast.success('Client assigned successfully');
+    },
+    onError: (error: Error) => {
+      toast.error('Failed to assign client', { description: error.message });
+    },
+  });
+
+  const createTaskMutation = useMutation({
+    mutationFn: (taskData: Parameters<typeof createTask>[0]) => createTask(taskData),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.tasks({}) });
+      queryClient.invalidateQueries({ queryKey: ['edit-project-details', editingProject?.id] });
+      toast.success('Task created successfully');
+      resetForm();
+    },
+    onError: (error: Error) => {
+      toast.error('Failed to create task', { description: error.message });
+    },
+  });
+
+  const handleUpdateProject = async (e: React.FormEvent, nextStep?: EditStep) => {
     e.preventDefault();
 
     if (form.title.trim().length < 3) {
@@ -138,6 +216,50 @@ export const ProjectManagement = () => {
     await updateMutation.mutateAsync({
       id: editingProject.id,
       body: toProjectUpdatePayload(form),
+    });
+
+    if (nextStep) {
+      setEditStep(nextStep);
+    }
+  };
+
+  const handleSelectClient = async (clientId: string) => {
+    await assignClientMutation.mutateAsync(clientId);
+  };
+
+  const handleCreateTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!taskForm.title.trim()) {
+      toast.error('Task title is required');
+      return;
+    }
+
+    if (!taskForm.assignedTo) {
+      toast.error('Please assign the task to an employee');
+      return;
+    }
+
+    if (!editingProject) return;
+
+    const assignedUser = employeesQuery.data?.find((u) => u.uid === taskForm.assignedTo);
+    const clientEmail = selectedClientId
+      ? clientsQuery.data?.find((c) => c.id === selectedClientId)?.email
+      : undefined;
+
+    const dueDate = taskForm.dueDate
+      ? new Date(`${taskForm.dueDate}T00:00:00`).toISOString()
+      : undefined;
+
+    await createTaskMutation.mutateAsync({
+      projectId: editingProject.id,
+      title: taskForm.title.trim(),
+      description: taskForm.description.trim() || undefined,
+      assignedTo: taskForm.assignedTo,
+      assignedToName: assignedUser?.name || undefined,
+      clientEmail: clientEmail,
+      priority: taskForm.priority,
+      dueDate: dueDate,
     });
   };
 
@@ -384,59 +506,355 @@ export const ProjectManagement = () => {
       </Dialog>
 
       <Dialog open={isEditing} onOpenChange={(open) => !open && resetForm()}>
-        <DialogContent className="w-2xl max-h-[90vh] min-h-0 overflow-hidden flex flex-col p-0 rounded-2xl border-zinc-200">
+        <DialogContent className="max-w-[70%] max-h-[90vh] min-h-0 overflow-hidden flex flex-col p-0 rounded-2xl border-zinc-200">
           <DialogHeader className="p-6 border-b border-zinc-100 bg-zinc-50/50">
             <DialogTitle className="text-xl font-bold">Edit Project</DialogTitle>
-            <DialogDescription>Update project details and status.</DialogDescription>
+            <DialogDescription>Update project details, assign clients, and create tasks.</DialogDescription>
           </DialogHeader>
 
-          <div className="flex-1 overflow-y-auto p-6">
-            <form id="edit-project-form" onSubmit={handleUpdateProject} className="space-y-6">
-              <div className="space-y-2">
-                <Label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Project Title</Label>
-                <Input
-                  placeholder="e.g. Q3 Paid Media Launch"
-                  value={form.title}
-                  onChange={(e) => setForm((current) => ({ ...current, title: e.target.value }))}
-                  className="rounded-xl border-zinc-200 h-11"
-                  required
-                />
+          <div className="flex-1 overflow-hidden flex min-h-0">
+            {/* Vertical Stepper */}
+            <div className="w-48 border-r border-zinc-100 bg-zinc-50/50 p-6 overflow-y-auto">
+              <div className="space-y-4">
+                {editSteps.map((step, index) => (
+                  <div key={step.id}>
+                    <button
+                      onClick={() => {
+                        const currentStepIndex = editSteps.findIndex((s) => s.id === editStep);
+                        if (currentStepIndex >= index) {
+                          setEditStep(step.id);
+                        }
+                      }}
+                      disabled={editSteps.findIndex((s) => s.id === editStep) < index}
+                      className={`w-full text-left transition-all ${
+                        editStep === step.id
+                          ? 'opacity-100'
+                          : editSteps.findIndex((s) => s.id === editStep) > index
+                            ? 'opacity-75 hover:opacity-100 cursor-pointer'
+                            : 'opacity-40 cursor-not-allowed'
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div
+                          className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 transition-all ${
+                            editStep === step.id
+                              ? 'bg-zinc-900 text-white'
+                              : editSteps.findIndex((s) => s.id === editStep) > index
+                                ? 'bg-emerald-100 text-emerald-700'
+                                : 'bg-zinc-200 text-zinc-600'
+                          }`}
+                        >
+                          {editSteps.findIndex((s) => s.id === editStep) > index ? <Check className="w-4 h-4" /> : index + 1}
+                        </div>
+                        <div className="min-w-0 pt-0.5">
+                          <p className="text-xs font-bold text-zinc-900 leading-snug">{step.label}</p>
+                          <p className="text-[10px] text-zinc-500 mt-0.5">{step.description}</p>
+                        </div>
+                      </div>
+                    </button>
+
+                    {index < editSteps.length - 1 && (
+                      <div className="ml-4 h-8 border-l-2 border-zinc-200 my-2" />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Content Area */}
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="mb-6">
+                <h3 className="text-lg font-bold text-zinc-900">{editSteps.find((s) => s.id === editStep)?.label}</h3>
               </div>
 
-              <div className="space-y-2">
-                <Label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Description</Label>
-                <Input
-                  placeholder="Optional project notes..."
-                  value={form.description}
-                  onChange={(e) => setForm((current) => ({ ...current, description: e.target.value }))}
-                  className="rounded-xl border-zinc-200 h-11"
-                />
-              </div>
+              {editStep === 'details' && (
+                <form id="edit-details-form" onSubmit={(e) => handleUpdateProject(e, 'client')} className="space-y-6">
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Project Title</Label>
+                    <Input
+                      placeholder="e.g. Q3 Paid Media Launch"
+                      value={form.title}
+                      onChange={(e) => setForm((current) => ({ ...current, title: e.target.value }))}
+                      className="rounded-xl border-zinc-200 h-11"
+                      required
+                    />
+                  </div>
 
-              <div className="space-y-2">
-                <Label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Status</Label>
-                <Select value={form.status} onValueChange={(value) => value && setForm((current) => ({ ...current, status: value }))}>
-                  <SelectTrigger className="rounded-xl border-zinc-200 h-11">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="rounded-xl shadow-xl">
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="paused">Paused</SelectItem>
-                    <SelectItem value="completed">Completed</SelectItem>
-                    <SelectItem value="archived">Archived</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </form>
-          </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Description</Label>
+                    <Textarea
+                      placeholder="Optional project notes..."
+                      value={form.description}
+                      onChange={(e) => setForm((current) => ({ ...current, description: e.target.value }))}
+                      className="rounded-xl border-zinc-200 min-h-32"
+                    />
+                  </div>
 
-          <div className="p-6 border-t border-zinc-100 bg-white flex gap-3 justify-end">
-            <Button type="button" variant="ghost" onClick={resetForm} className="rounded-xl h-11 px-6">
-              Cancel
-            </Button>
-            <Button type="submit" form="edit-project-form" disabled={isSaving} className="bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl h-11 px-8">
-              {isSaving ? 'Saving...' : 'Update Project'}
-            </Button>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Status</Label>
+                    <Select value={form.status} onValueChange={(value) => value && setForm((current) => ({ ...current, status: value }))}>
+                      <SelectTrigger className="rounded-xl border-zinc-200 h-11">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="rounded-xl shadow-xl">
+                        <SelectItem value="active">Active</SelectItem>
+                        <SelectItem value="paused">Paused</SelectItem>
+                        <SelectItem value="completed">Completed</SelectItem>
+                        <SelectItem value="archived">Archived</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="flex gap-3 pt-4">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => setEditStep('client')}
+                      className="flex-1 rounded-xl h-11"
+                    >
+                      Skip
+                    </Button>
+                    <Button
+                      type="submit"
+                      disabled={isSaving}
+                      className="flex-1 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl h-11"
+                    >
+                      {isSaving ? 'Saving...' : 'Save & Next →'}
+                    </Button>
+                  </div>
+                </form>
+              )}
+
+              {editStep === 'client' && (
+                <div className="space-y-4">
+                  {editProjectDetailsQuery.data?.clients && editProjectDetailsQuery.data.clients.length > 0 && (
+                    <div className="rounded-xl border border-zinc-200 bg-zinc-50/50 p-4 mb-4">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-2">Current Clients</p>
+                      <div className="space-y-2">
+                        {editProjectDetailsQuery.data.clients.map((client) => (
+                          <div key={client.id} className="flex items-center gap-3 p-2 rounded-lg bg-white border border-zinc-100">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-semibold text-zinc-900 truncate">{client.name}</p>
+                              <p className="text-xs text-zinc-500 truncate">{client.email}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-3">Assign New Client</p>
+                    {clientsQuery.isLoading ? (
+                      <div className="flex flex-col items-center gap-2 text-zinc-400 py-8">
+                        <div className="w-6 h-6 border-2 border-zinc-200 border-t-zinc-800 rounded-full animate-spin" />
+                        <span className="text-xs font-medium">Loading clients...</span>
+                      </div>
+                    ) : clientsQuery.error ? (
+                      <div className="text-center py-8 text-zinc-400">
+                        <p className="text-sm font-bold text-zinc-900">Failed to load clients</p>
+                      </div>
+                    ) : (clientsQuery.data ?? []).length > 0 ? (
+                      <ScrollArea className="h-[300px] pr-4">
+                        <div className="space-y-2">
+                          {clientsQuery.data?.map((client) => (
+                            <button
+                              key={client.id}
+                              onClick={() => handleSelectClient(client.id)}
+                              disabled={assignClientMutation.isPending}
+                              className="w-full text-left p-4 rounded-xl border border-zinc-200 hover:border-zinc-300 hover:bg-zinc-50/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              <div className="flex items-start justify-between">
+                                <div className="min-w-0 flex-1">
+                                  <p className="font-semibold text-zinc-900 truncate">{client.name}</p>
+                                  <div className="mt-2 space-y-1 text-xs text-zinc-600">
+                                    {client.email && (
+                                      <div className="flex items-center gap-2">
+                                        <Mail className="w-3 h-3 shrink-0" />
+                                        <span className="truncate">{client.email}</span>
+                                      </div>
+                                    )}
+                                    {client.company && (
+                                      <div className="flex items-center gap-2">
+                                        <Building2 className="w-3 h-3 shrink-0" />
+                                        <span className="truncate">{client.company}</span>
+                                      </div>
+                                    )}
+                                    {client.phone && (
+                                      <div className="flex items-center gap-2">
+                                        <Phone className="w-3 h-3 shrink-0" />
+                                        <span className="truncate">{client.phone}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                                <ChevronRight className="w-5 h-5 text-zinc-400 shrink-0 ml-4" />
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </ScrollArea>
+                    ) : (
+                      <div className="text-center py-8 text-zinc-400">
+                        <p className="text-sm font-medium">No clients available</p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex gap-3 pt-4">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => setEditStep('details')}
+                      className="flex-1 rounded-xl h-11"
+                    >
+                      ← Back
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => setEditStep('employees')}
+                      className="flex-1 rounded-xl h-11"
+                    >
+                      Skip
+                    </Button>
+                    <Button
+                      type="button"
+                      onClick={() => setEditStep('employees')}
+                      className="flex-1 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl h-11"
+                    >
+                      Next →
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {editStep === 'employees' && (
+                <div className="space-y-4">
+                  {editProjectDetailsQuery.data?.tasks && editProjectDetailsQuery.data.tasks.length > 0 && (
+                    <div className="rounded-xl border border-zinc-200 bg-zinc-50/50 p-4 mb-4">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-2">Current Tasks</p>
+                      <div className="space-y-2">
+                        {editProjectDetailsQuery.data.tasks.map((task) => (
+                          <div key={task.id} className="text-sm text-zinc-700 flex items-start gap-2">
+                            <span className="text-zinc-400 mt-0.5">•</span>
+                            <span>{task.title}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-3">Create New Task</p>
+                    <form id="create-task-form" onSubmit={handleCreateTask} className="space-y-4">
+                      <div className="space-y-2">
+                        <Label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Task Title *</Label>
+                        <Input
+                          placeholder="e.g., Initial Campaign Research"
+                          value={taskForm.title}
+                          onChange={(e) => setTaskForm((prev) => ({ ...prev, title: e.target.value }))}
+                          className="rounded-xl border-zinc-200 h-11"
+                          required
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Description</Label>
+                        <Textarea
+                          placeholder="Task details, expected output, or execution notes..."
+                          value={taskForm.description}
+                          onChange={(e) => setTaskForm((prev) => ({ ...prev, description: e.target.value }))}
+                          className="rounded-xl border-zinc-200 min-h-20"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Assign To *</Label>
+                          <Select
+                            value={taskForm.assignedTo}
+                            onValueChange={(value) => setTaskForm((prev) => ({ ...prev, assignedTo: value }))}
+                          >
+                            <SelectTrigger className="rounded-xl border-zinc-200 h-11">
+                              <SelectValue placeholder="Select employee" />
+                            </SelectTrigger>
+                            <SelectContent className="rounded-xl">
+                              {employeesQuery.isLoading ? (
+                                <div className="p-2 text-xs text-zinc-500">Loading employees...</div>
+                              ) : (
+                                <>
+                                  {(employeesQuery.data ?? [])
+                                    .filter((e) => e.role === 'employee' && !e.isDisabled)
+                                    .map((emp) => (
+                                      <SelectItem key={emp.uid} value={emp.uid}>
+                                        {emp.name}
+                                      </SelectItem>
+                                    ))}
+                                </>
+                              )}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Priority</Label>
+                          <Select
+                            value={taskForm.priority}
+                            onValueChange={(value: 'low' | 'medium' | 'high') => setTaskForm((prev) => ({ ...prev, priority: value }))}
+                          >
+                            <SelectTrigger className="rounded-xl border-zinc-200 h-11">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="rounded-xl">
+                              <SelectItem value="low">Low</SelectItem>
+                              <SelectItem value="medium">Medium</SelectItem>
+                              <SelectItem value="high">High</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Due Date</Label>
+                        <Input
+                          type="date"
+                          value={taskForm.dueDate}
+                          onChange={(e) => setTaskForm((prev) => ({ ...prev, dueDate: e.target.value }))}
+                          className="rounded-xl border-zinc-200 h-11"
+                        />
+                      </div>
+
+                      <div className="flex gap-3 pt-4">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={() => setEditStep('client')}
+                          className="flex-1 rounded-xl h-11"
+                        >
+                          ← Back
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={resetForm}
+                          className="flex-1 rounded-xl h-11"
+                        >
+                          Skip
+                        </Button>
+                        <Button
+                          type="submit"
+                          disabled={createTaskMutation.isPending || !taskForm.title.trim() || !taskForm.assignedTo}
+                          className="flex-1 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl h-11"
+                        >
+                          {createTaskMutation.isPending ? 'Creating...' : 'Done'}
+                        </Button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </DialogContent>
       </Dialog>
