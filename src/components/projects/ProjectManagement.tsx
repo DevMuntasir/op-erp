@@ -184,7 +184,7 @@ export const ProjectManagement = () => {
 
         <Button
           onClick={() => setIsWizardOpen(true)}
-          className="bg-zinc-900 hover:bg-zinc-800 text-white gap-2 h-10 px-4 rounded-xl shadow-sm"
+          size="sm"
         >
           <Plus className="w-4 h-4" />
           Create Project

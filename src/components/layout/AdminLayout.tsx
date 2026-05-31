@@ -192,7 +192,7 @@ function SidebarContent({
           </div>
           <Button 
             variant="ghost" 
-            className="w-full justify-start gap-3 px-3 text-zinc-500 hover:text-red-600 hover:bg-red-50 font-bold"
+            
             onClick={() => {
               logout();
               navigate('/login');

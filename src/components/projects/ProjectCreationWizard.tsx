@@ -213,7 +213,7 @@ export const ProjectCreationWizard: React.FC<ProjectCreationWizardProps> = ({ op
         />
       </div>
 
-      <Button type="submit" disabled={createProjectMutation.isPending} className="w-full bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl h-11">
+      <Button type="submit" disabled={createProjectMutation.isPending} >
         {createProjectMutation.isPending ? 'Creating...' : 'Create Project'}
       </Button>
     </form>

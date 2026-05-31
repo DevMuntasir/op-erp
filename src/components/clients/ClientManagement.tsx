@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/src/App';
-import { Client, CurrencyCode, Project, SUPPORTED_CURRENCIES, User } from '@/src/types';
+import { Client, CurrencyCode, SUPPORTED_CURRENCIES, User } from '@/src/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -9,51 +9,42 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Plus, Search, Filter, Mail, Phone, Building, User as UserIcon, Edit2, Trash2, Users, Globe, Clock, ShieldCheck, Share2, Lock, Receipt } from 'lucide-react';
 import { toast } from 'sonner';
 import { ConfirmDialog } from '@/src/components/shared/dialogs/ConfirmDialog';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Checkbox } from '@/components/ui/checkbox';
 import { createClient, deleteClient, updateClient } from '@/src/api/endpoints/clients.api';
 import type { CreateClientRequest, UpdateClientRequest } from '@/src/api/endpoints/clients.api';
 import { listClients } from '@/src/api/endpoints/clients.api';
 import { listEmployees } from '@/src/api/endpoints/employees.api';
-import { listProjects } from '@/src/api/endpoints/projects.api';
 import { queryKeys } from '@/src/shared/constants/query-keys';
 import { formatCurrency } from '@/src/lib/utils';
 
 type ClientFormState = {
-  projectId: string;
   name: string;
   email: string;
+  password: string;
   phone: string;
   company: string;
   website: string;
   status: Client['status'];
-  assignedDate: string;
   invoiceValue: string;
   selectedCurrency: CurrencyCode;
   notes: string;
-  assignedEmployees: string[];
-  portalPassword: string;
 };
 
 const initialFormState = (): ClientFormState => ({
-  projectId: '',
   name: '',
   email: '',
+  password: '',
   phone: '',
   company: '',
   website: '',
   status: 'active',
-  assignedDate: new Date().toISOString().split('T')[0],
   invoiceValue: '',
   selectedCurrency: 'USD',
   notes: '',
-  assignedEmployees: [],
-  portalPassword: '',
 });
 
 const toClientNumber = (value: Client['invoiceValue']) => {
@@ -76,18 +67,19 @@ const normalizeClient = (client: Client): Client => ({
   invoiceValue: toClientNumber(client.invoiceValue),
 });
 
-const getClientPayload = (form: ClientFormState): CreateClientRequest => {
+const getClientPayload = (form: ClientFormState, isNew: boolean): CreateClientRequest => {
   const payload: CreateClientRequest = {
     name: form.name.trim(),
     email: form.email.trim(),
-    project_id: form.projectId,
     status: form.status || 'active',
   };
 
+  if (isNew && form.password.trim()) {
+    payload.password = form.password.trim();
+  }
   if (form.phone.trim()) payload.phone = form.phone.trim();
   if (form.company.trim()) payload.company = form.company.trim();
   if (form.website.trim()) payload.website = form.website.trim();
-  if (form.assignedEmployees.length > 0) payload.assignedEmployees = form.assignedEmployees;
   if (form.notes.trim()) payload.notes = form.notes.trim();
   if (form.selectedCurrency) payload.currency = form.selectedCurrency;
 
@@ -131,15 +123,9 @@ export const ClientManagement = () => {
     queryFn: listEmployees,
     enabled: !!user && isAdmin,
   });
-  const projectsQuery = useQuery({
-    queryKey: queryKeys.projects({ scope: user?.role ?? 'anonymous' }),
-    queryFn: listProjects,
-    enabled: !!user && isAdmin,
-  });
 
   const normalizedClients = useMemo(() => (clientsQuery.data ?? []).map(normalizeClient), [clientsQuery.data]);
   const employees = useMemo(() => (employeesQuery.data ?? []).filter((employee) => employee.role === 'employee'), [employeesQuery.data]);
-  const projects = useMemo<Project[]>(() => projectsQuery.data ?? [], [projectsQuery.data]);
 
   const adminOptions = useMemo(
     () =>
@@ -216,23 +202,14 @@ export const ClientManagement = () => {
   }, [adminFilter, employeeFilter, normalizedClients, searchTerm, statusFilter]);
 
   const handleSaveClient = async (e: React.FormEvent) => {
-    
     e.preventDefault();
     if (!form.name.trim() || !form.email.trim()) {
       toast.error('Name and Email are required');
       return;
     }
-    if (!form.projectId) {
-      toast.error('Project is required');
-      return;
-    }
 
-    if (form.portalPassword.trim()) {
-      disabledFeatureMessage('Client portal account creation');
-      return;
-    }
-
-    const payload = getClientPayload(form);
+    const isNew = !editingClient;
+    const payload = getClientPayload(form, isNew);
     if (editingClient) {
       await updateMutation.mutateAsync({ id: editingClient.id, body: payload });
       return;
@@ -243,22 +220,16 @@ export const ClientManagement = () => {
   const handleEdit = (client: Client) => {
     setEditingClient(client);
     setForm({
-      projectId: client.project_id || '',
       name: client.name,
       email: client.email,
+      password: '',
       phone: client.phone || '',
       company: client.company || '',
       website: client.website || '',
       status: client.status || 'active',
-      assignedDate:
-        typeof client.assignedDate === 'string' && client.assignedDate
-          ? client.assignedDate.slice(0, 10)
-          : new Date().toISOString().slice(0, 10),
       invoiceValue: client.invoiceValue != null ? String(toClientNumber(client.invoiceValue)) : '',
       selectedCurrency: (client.currency as CurrencyCode) || 'USD',
       notes: client.notes || '',
-      assignedEmployees: client.assignedEmployees || [],
-      portalPassword: '',
     });
     setIsAdding(true);
   };
@@ -326,6 +297,17 @@ export const ClientManagement = () => {
                           required
                         />
                       </div>
+                      {!editingClient && (
+                        <div className="space-y-1.5">
+                          <Label className="text-xs uppercase tracking-wide text-zinc-500">Password</Label>
+                          <Input
+                            type="password"
+                            placeholder="Create account password"
+                            value={form.password}
+                            onChange={(e) => setForm((current) => ({ ...current, password: e.target.value }))}
+                          />
+                        </div>
+                      )}
                       <div className="space-y-1.5">
                         <Label className="text-xs uppercase tracking-wide text-zinc-500">Phone Number</Label>
                         <Input
@@ -351,21 +333,6 @@ export const ClientManagement = () => {
                         />
                       </div>
                       <div className="space-y-1.5">
-                        <Label className="text-xs uppercase tracking-wide text-zinc-500">Project</Label>
-                        <Select value={form.projectId} onValueChange={(value) => setForm((current) => ({ ...current, projectId: value }))}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select project" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {projects.map((project) => (
-                              <SelectItem key={project.id} value={project.id}>
-                                {project.title || project.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-1.5">
                         <Label className="text-xs uppercase tracking-wide text-zinc-500">Status</Label>
                         <Select value={form.status} onValueChange={(value: Client['status']) => setForm((current) => ({ ...current, status: value }))}>
                           <SelectTrigger>
@@ -383,16 +350,6 @@ export const ClientManagement = () => {
 
                   <div className="space-y-3 rounded-lg border border-zinc-200 p-3">
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                      <div className="space-y-1.5">
-                        <Label className="text-xs uppercase tracking-wide text-zinc-500">Assigned Date</Label>
-                        <Input
-                          type="date"
-                          value={form.assignedDate}
-                          onChange={(e) => setForm((current) => ({ ...current, assignedDate: e.target.value }))}
-                          disabled
-                        />
-                        <p className="text-[10px] text-zinc-500">Read-only placeholder. The current client API does not persist assigned dates.</p>
-                      </div>
                       <div className="space-y-1.5">
                         <Label className="text-xs uppercase tracking-wide text-zinc-500">Invoice Value</Label>
                         <div className="flex gap-2">
@@ -419,58 +376,9 @@ export const ClientManagement = () => {
                           </Select>
                         </div>
                       </div>
-                      {!editingClient && (
-                        <div className="space-y-1.5 md:col-span-2">
-                          <Label className="flex items-center gap-2 text-xs uppercase tracking-wide text-zinc-500">
-                            <Lock className="h-3 w-3" />
-                            Portal Password (Optional)
-                          </Label>
-                          <Input
-                            type="password"
-                            placeholder="Create portal account instantly"
-                            value={form.portalPassword}
-                            onChange={(e) => setForm((current) => ({ ...current, portalPassword: e.target.value }))}
-                          />
-                          <p className="text-[10px] text-zinc-500">Portal creation is unavailable in the API-backed client module.</p>
-                        </div>
-                      )}
                     </div>
                   </div>
 
-                  <div className="space-y-3 rounded-lg border border-zinc-200 p-3">
-                    <Label className="text-xs uppercase tracking-wide text-zinc-500">Assign Team Members</Label>
-                    <ScrollArea className="h-40 rounded-lg border border-zinc-200 bg-zinc-50/40 p-3">
-                      <div className="space-y-2">
-                        {employees.map((emp) => (
-                          <label
-                            key={emp.uid}
-                            className="flex cursor-pointer items-center gap-3 rounded-lg border border-zinc-100 bg-white px-3 py-2 transition-colors hover:border-zinc-200"
-                          >
-                            <Checkbox
-                              checked={form.assignedEmployees.includes(emp.uid)}
-                              onCheckedChange={(checked) =>
-                                setForm((current) => ({
-                                  ...current,
-                                  assignedEmployees: checked
-                                    ? [...current.assignedEmployees, emp.uid]
-                                    : current.assignedEmployees.filter((id) => id !== emp.uid),
-                                }))
-                              }
-                            />
-                            <Avatar className="h-8 w-8">
-                              <AvatarImage src={emp.photoURL || undefined} />
-                              <AvatarFallback>{emp.name[0]}</AvatarFallback>
-                            </Avatar>
-                            <div className="min-w-0">
-                              <div className="truncate text-sm font-medium text-zinc-900">{emp.name}</div>
-                              <div className="truncate text-xs text-zinc-500">{emp.email}</div>
-                            </div>
-                          </label>
-                        ))}
-                        {!employees.length && <div className="px-3 py-6 text-center text-xs text-zinc-500">No employee options available for assignment.</div>}
-                      </div>
-                    </ScrollArea>
-                  </div>
 
                   <div className="space-y-1.5 rounded-lg border border-zinc-200 p-3">
                     <Label className="text-xs uppercase tracking-wide text-zinc-500">Internal Notes</Label>
@@ -483,10 +391,9 @@ export const ClientManagement = () => {
                 </div>
 
                 <div className="space-y-2 border-t border-zinc-200 px-5 py-4">
-                  <Button type="submit" className="h-10 w-full" disabled={isSaving || !projects.length}>
+                  <Button type="submit" className="h-10 w-full" disabled={isSaving}>
                     {isSaving ? 'Processing...' : editingClient ? 'Update Client' : 'Create Client'}
                   </Button>
-                  {!projects.length && <p className="text-center text-xs text-zinc-500">No projects found. Create a project first.</p>}
                   <Button type="button" variant="ghost" className="w-full text-xs text-zinc-500 hover:text-zinc-700" onClick={resetForm}>
                     Reset form
                   </Button>

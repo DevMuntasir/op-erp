@@ -132,11 +132,10 @@ export interface Client {
 export interface ClientUpsertPayload {
   name?: string;
   email?: string;
-  project_id?: string;
+  password?: string;
   phone?: string;
   company?: string;
   website?: string;
-  assignedEmployees?: string[];
   status?: 'active' | 'inactive' | 'lead' | string;
   invoiceValue?: number;
   currency?: CurrencyCode | string;

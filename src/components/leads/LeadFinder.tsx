@@ -154,7 +154,7 @@ export const LeadFinder = () => {
             <Button
               type="submit"
               disabled={searchMutation.isPending || searchQuery.trim().length < 3}
-              className="h-11 px-8 bg-zinc-900 hover:bg-zinc-800 text-white font-bold shrink-0 shadow-lg shadow-zinc-200"
+              
             >
               {searchMutation.isPending ? (
                 <>

@@ -1,13 +1,10 @@
-import React, { useEffect, useState, useRef, useMemo } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { collection, query, onSnapshot, orderBy, where, limit, doc, getDoc, addDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
-import { useQuery } from '@tanstack/react-query';
 import { db, handleFirestoreError, OperationType } from '@/src/lib/firebase';
 import { isUserOnline, formatTimeHalifax, formatLastSeenHalifax } from '@/src/lib/presence';
 import { Message, User } from '@/src/types';
 import { logCallAutomatically } from '@/src/lib/calls';
 import { useAuth } from '@/src/App';
-import { listEmployees } from '@/src/api/endpoints/employees.api';
-import { listAdmins } from '@/src/api/endpoints/admins.api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
@@ -18,65 +15,55 @@ import { toast } from 'sonner';
 
 export const ChatSystem = () => {
   const { user } = useAuth();
+  const [chatPartners, setChatPartners] = useState<User[]>([]);
   const [selectedPartner, setSelectedPartner] = useState<User | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [newMessage, setNewMessage] = useState('');
   const [showListOnMobile, setShowListOnMobile] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [loading, setLoading] = useState(true);
 
-  // Load employees and admins via API
-  const employeesQuery = useQuery({
-    queryKey: ['chat-partners-employees'],
-    queryFn: listEmployees,
-    enabled: !!user && user.role !== 'super_admin',
-  });
-
-  const adminsQuery = useQuery({
-    queryKey: ['chat-partners-admins'],
-    queryFn: listAdmins,
-    enabled: !!user && user.role === 'super_admin',
-  });
-
-  // For employees, also fetch their admin from Firestore
-  const [adminForEmployee, setAdminForEmployee] = useState<User | null>(null);
   useEffect(() => {
-    if (!user || user.role !== 'employee' || !user.adminId) return;
+    if (!user?.role) {
+      console.log("ChatSystem: No user role yet, waiting...");
+      return;
+    }
 
-    const fetchAdmin = async () => {
-      try {
-        const adminDoc = await getDoc(doc(db, 'profiles', user.adminId!));
-        if (adminDoc.exists()) {
-          setAdminForEmployee({ uid: adminDoc.id, ...adminDoc.data() } as User);
-        }
-      } catch (error) {
-        console.error("Error fetching admin:", error);
-      }
-    };
+    console.log("ChatSystem: Current user role:", user.role);
 
-    fetchAdmin();
-  }, [user]);
-
-  // Compute chat partners based on role
-  const chatPartners = useMemo(() => {
-    if (!user) return [];
+    let q;
     if (user.role === 'super_admin') {
-      // super_admin sees all admins and employees
-      return [
-        ...(adminsQuery.data ?? []),
-        ...(employeesQuery.data ?? []),
-      ].filter(p => p.uid !== user.uid);
+      q = query(collection(db, 'profiles'), where('role', 'in', ['admin', 'employee']));
+    } else if (user.role === 'admin') {
+      q = query(collection(db, 'profiles'), where('adminId', '==', user.uid), where('role', '==', 'employee'));
+    } else if (user.adminId) {
+      // Employees see their admin and colleagues
+      q = query(collection(db, 'profiles'), where('adminId', '==', user.adminId));
+    } else {
+      console.log("ChatSystem: Employee has no adminId yet, skipping query");
+      setLoading(false);
+      return;
     }
-    // admin sees their employees
-    if (user.role === 'admin') {
-      return (employeesQuery.data ?? []).filter(p => p.uid !== user.uid);
-    }
-    // employee sees colleagues + their admin
-    const colleagues = (employeesQuery.data ?? []).filter(p => p.uid !== user.uid);
-    return adminForEmployee ? [...colleagues, adminForEmployee] : colleagues;
-  }, [user, employeesQuery.data, adminsQuery.data, adminForEmployee]);
 
-  const loading = employeesQuery.isLoading || adminsQuery.isLoading;
+    console.log(`ChatSystem: Querying profiles for role-based access`);
+
+    return onSnapshot(q, (snap) => {
+      console.log(`ChatSystem: Found ${snap.docs.length} users`);
+      const partners = snap.docs.map(doc => ({
+        uid: doc.id,
+        ...doc.data()
+      } as User));
+      console.log("ChatSystem: Partners found:", partners.map(p => p.email));
+      setChatPartners(partners);
+      setLoading(false);
+    }, (error) => {
+      console.error("ChatSystem: Profiles snapshot error:", error);
+      handleFirestoreError(error, OperationType.LIST, 'profiles');
+      toast.error("Failed to load chat partners");
+      setLoading(false);
+    });
+  }, [user]);
 
   useEffect(() => {
     if (!selectedPartner || !user) {
