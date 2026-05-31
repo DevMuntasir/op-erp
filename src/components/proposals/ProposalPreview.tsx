@@ -1,12 +1,13 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '@/src/lib/firebase';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { getProposal, sendProposal } from '@/src/api/endpoints/proposals.api';
+import { queryKeys } from '@/src/shared/constants/query-keys';
 import { useAuth } from '@/src/App';
 import { Proposal, SUPPORTED_CURRENCIES } from '@/src/types';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { 
+import {
   ArrowLeft, Printer, Send, MessageCircle, FileDown, Loader2,
   Phone, Mail, Globe, MapPin, CheckCircle2, ChevronRight,
   Database, Target, PlayCircle, BarChart3, Users, Zap, Search, Layout, Video
@@ -19,47 +20,43 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import { cn, formatCurrency } from '@/src/lib/utils';
-import { CurrencyCode } from '@/src/types';
+import { ProposalToolbar, ToolbarLeft, ToolbarRight, ToolbarDivider, ToolbarTitle } from '@/src/components/proposals/ProposalToolbar';
 
 export const ProposalPreview = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [proposal, setProposal] = useState<Proposal | null>(null);
-  const [creatorData, setCreatorData] = useState<{name: string} | null>(null);
-  const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
-  const [sending, setSending] = useState(false);
   const documentRef = useRef<HTMLDivElement>(null);
+  const queryClient = useQueryClient();
 
   const basePath = user?.role === 'super_admin' || user?.role === 'admin' ? '/admin' : '/employee';
 
-  useEffect(() => {
-    if (id) {
-      loadProposal(id);
-    }
-  }, [id]);
+  const proposalQuery = useQuery({
+    queryKey: queryKeys.proposal(id!),
+    queryFn: () => getProposal(id!),
+    enabled: !!id,
+  });
 
-  const loadProposal = async (proposalId: string) => {
-    try {
-      const docSnap = await getDoc(doc(db, 'proposals', proposalId));
-      if (docSnap.exists()) {
-        const data = { id: docSnap.id, ...docSnap.data() } as Proposal;
-        setProposal(data);
-        
-        // Dynamic Hooking: If creatorName is missing, fetch it from the user document
-        if (!data.creatorName && data.createdBy) {
-           const userSnap = await getDoc(doc(db, 'users', data.createdBy));
-           if (userSnap.exists()) {
-             setCreatorData({ name: userSnap.data().name });
-           }
-        }
-      }
-    } catch (err) {
-      toast.error("Failed to load proposal preview");
-    } finally {
-      setLoading(false);
-    }
+  const proposal = proposalQuery.data ?? null;
+  const loading = proposalQuery.isLoading;
+
+  const sendMutation = useMutation({
+    mutationFn: () => sendProposal(id!),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(queryKeys.proposal(id!), updated);
+      queryClient.invalidateQueries({ queryKey: queryKeys.proposals() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.proposalSummary });
+      toast.success(`Proposal sent to ${updated.clientName}!`);
+    },
+    onError: (error: Error) => {
+      toast.error('Failed to send proposal', { description: error.message });
+    },
+  });
+
+  const handleSendToClient = () => {
+    if (!id || !proposal) return;
+    sendMutation.mutate();
   };
 
   const handlePrint = () => {
@@ -291,77 +288,56 @@ export const ProposalPreview = () => {
     }
   };
   
-  const handleSendToClient = async () => {
-    if (!id || !proposal) return;
-    setSending(true);
-    try {
-      await updateDoc(doc(db, 'proposals', id), {
-        status: 'sent',
-        sentAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      });
-      setProposal(prev => prev ? { ...prev, status: 'sent' } : null);
-      toast.success(`Proposal sent to ${proposal.clientName}!`);
-    } catch (err) {
-      toast.error("Failed to update proposal status");
-    } finally {
-      setSending(false);
-    }
-  };
 
   if (loading) return <div className="p-8 text-center bg-zinc-50 min-h-screen pt-20">Loading proposal preview...</div>;
   if (!proposal) return <div className="p-8 text-center bg-zinc-50 min-h-screen pt-20">Proposal not found.</div>;
 
   const currencySymbol = SUPPORTED_CURRENCIES.find(c => c.code === proposal.currency)?.symbol || '$';
   return (
-    <div className="min-h-screen bg-zinc-100 pb-20">
-      {/* Tool bar - hidden on print */}
-      <div className="sticky top-0 bg-white/80 backdrop-blur-md border-b border-zinc-200 z-[100] px-6 py-3 print:hidden">
-        <div className="max-w-5xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="sm" onClick={() => navigate(`${basePath}/proposals/edit/${id}`)}>
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Back
-            </Button>
-            <div className="h-4 w-[1px] bg-zinc-200 mx-2" />
-            <p className="text-sm font-medium text-zinc-500">Previewing: <span className="text-zinc-900 font-bold">{proposal.title}</span></p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={handlePrint} className="h-9">
-              <Printer className="w-4 h-4 mr-2" />
-              Print
-            </Button>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={handleExportPDF} 
-              disabled={exporting}
-              className="h-9 border-zinc-200 text-zinc-600 bg-white hover:bg-zinc-50"
-            >
-              {exporting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <FileDown className="w-4 h-4 mr-2 text-brand" />}
-              Save PDF
-            </Button>
-            <Button 
-              size="sm" 
-              onClick={handleSendToClient}
-              disabled={sending || proposal.status === 'sent'}
-              className="h-9 bg-brand hover:bg-brand/90 text-white shadow-lg shadow-brand/20 transition-all border-none"
-            >
-              {sending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
-              {proposal.status === 'sent' ? 'Already Sent' : 'Send to Client'}
-            </Button>
-          </div>
-        </div>
-      </div>
+    <div className="min-h-screen bg-zinc-50 pb-20">
+      <ProposalToolbar sticky>
+        <ToolbarLeft>
+          <Button variant="ghost" size="sm" onClick={() => navigate(`${basePath}/proposals/edit/${id}`)} className="h-9 px-3 rounded-lg">
+            <ArrowLeft className="w-4 h-4" />
+          </Button>
+          <ToolbarDivider />
+          <ToolbarTitle>
+            Previewing: <span className="text-zinc-900 font-bold">{proposal.title}</span>
+          </ToolbarTitle>
+        </ToolbarLeft>
+        <ToolbarRight>
+          <Button variant="outline" size="icon-lg" onClick={handlePrint} >
+            <Printer className="w-4 h-4" />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon-lg"
+            onClick={handleExportPDF}
+            disabled={exporting}
+            
+          >
+            {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4 text-brand" /> } 
+          </Button>
+          <Button
+          
+            onClick={handleSendToClient}
+            disabled={sendMutation.isPending || proposal.status === 'sent'}
+           
+          >
+            {sendMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Send className="w-4 h-4 mr-1" />}
+            {proposal.status === 'sent' ? 'Sent' : 'Send'}
+          </Button>
+        </ToolbarRight>
+      </ProposalToolbar>
 
       {/* Proposal Document */}
       <div className="w-full max-w-[21cm] mx-auto mt-8 print:mt-0 shadow-2xl print:shadow-none px-0 sm:px-4 md:px-0">
-        <div 
+        <div
           ref={documentRef}
-          className="bg-[#f2f2f7] flex flex-col relative overflow-hidden font-sans min-h-screen"
+          className="bg-white flex flex-col relative overflow-hidden font-sans min-h-screen"
         >
           {/* SEAMLESS CONTENT CONTAINER */}
-          <div className="relative z-10 w-full flex flex-col space-y-20 px-6 py-12 md:px-12 md:py-24">
+          <div className="relative z-10 w-full flex flex-col space-y-28 px-6 py-16 md:px-16 md:py-32">
             
             {/* COVER SECTION */}
             <div className="flex flex-col">
@@ -369,190 +345,162 @@ export const ProposalPreview = () => {
                 <BrandLogo className="w-32 md:w-48" />
               </div>
 
-              <div className="flex flex-col items-center justify-center text-center py-10 md:py-20">
-                <p className="text-brand font-bold text-sm md:text-lg mb-8 tracking-wide uppercase">Growth Strategy Proposal</p>
-                <h1 className="text-5xl md:text-[110px] font-black text-brand leading-none tracking-tighter mb-4 drop-shadow-lg uppercase">PROPOSAL</h1>
+              <div className="flex flex-col items-center justify-center text-center py-20 md:py-40">
+                <p className="text-brand font-semibold text-xs md:text-sm mb-8 tracking-widest uppercase">Strategic Digital Growth Proposal</p>
+                <h1 className="text-7xl md:text-[90px] font-black text-zinc-900 leading-none tracking-tighter mb-8 uppercase">PROPOSAL</h1>
                 
-                <div className="mt-10 md:mt-16 flex flex-col items-center gap-4">
-                  <div className="flex flex-col items-center gap-2 mb-4">
-                    <h2 className="text-zinc-400 text-xs md:text-sm font-black uppercase tracking-widest">Prepared By :</h2>
-                    <p className="text-brand text-xl md:text-2xl font-black italic">{proposal.creatorName || creatorData?.name || 'OP Media Strategist'}</p>
+                <div className="mt-12 md:mt-32 flex flex-col items-center gap-8">
+                  <div className="flex flex-col items-center gap-3">
+                    <h2 className="text-zinc-400 text-xs md:text-xs font-semibold uppercase tracking-widest letter-spacing">Prepared For</h2>
+                    <p className="text-zinc-900 text-3xl md:text-4xl font-black tracking-tighter leading-none">{proposal.clientName}</p>
+                    {proposal.businessName && <p className="text-zinc-500 text-lg md:text-lg font-medium mt-3">@{proposal.businessName}</p>}
                   </div>
-                  
-                  <h2 className="text-zinc-400 text-2xl md:text-4xl font-black uppercase tracking-tighter">Prepared For :</h2>
-                  <p className="text-brand text-4xl md:text-6xl font-black drop-shadow-md">{proposal.clientName}</p>
-                  {proposal.businessName && <p className="text-zinc-600 text-lg md:text-2xl font-bold italic">@{proposal.businessName}</p>}
                 </div>
               </div>
 
-              <div className="max-w-xl mx-auto w-full mb-12">
-                 <div className="bg-black rounded-3xl p-6 md:p-10 flex flex-col items-center justify-center shadow-2xl border border-zinc-800 text-center">
-                    <h3 className="text-white text-2xl md:text-4xl font-black tracking-tighter italic uppercase">{proposal.industry || 'DIGITAL GROWTH'}</h3>
-                    <p className="text-zinc-500 font-bold tracking-[0.4em] text-[10px] md:text-xs mt-2 uppercase italic">{proposal.location || 'GLOBAL'}</p>
-                    <p className="text-zinc-600 text-[8px] md:text-[10px] uppercase mt-4 tracking-widest font-bold italic">SECTOR PARTNER</p>
+              <div className="max-w-3xl mx-auto w-full mb-12">
+                 <div className="bg-zinc-900 rounded-2xl p-10 md:p-14 flex flex-col items-center justify-center shadow-lg text-center border border-zinc-800">
+                    <p className="text-zinc-400 text-xs font-semibold uppercase tracking-widest mb-4">Industry & Location</p>
+                    <h3 className="text-white text-4xl md:text-6xl font-black tracking-tighter mb-5">{proposal.industry || 'DIGITAL GROWTH'}</h3>
+                    <div className="h-1 w-10 bg-brand rounded-full mb-5" />
+                    <p className="text-zinc-200 font-medium text-base md:text-lg">{proposal.location || 'Global'}</p>
                  </div>
               </div>
 
-              <div className="flex justify-end gap-10">
-                  <div className="flex flex-col gap-3 text-right">
-                     <div className="inline-block border-[2px] border-brand rounded-full px-6 py-2 text-brand font-black text-lg mb-2">CONTACT US</div>
-                     <div className="space-y-2 pr-2 text-brand font-bold">
-                        <p className="flex items-center justify-end gap-3 text-sm"><span>+1 (902) 403-7871</span> <Phone className="w-4 h-4" /></p>
-                        <p className="flex items-center justify-end gap-3 text-sm"><span>info@opmediaagency.com</span> <Mail className="w-4 h-4" /></p>
-                        <p className="flex items-center justify-end gap-3 text-sm"><span>opmediaagency.com</span> <Globe className="w-4 h-4" /></p>
-                        <p className="flex items-center justify-end gap-3 text-sm"><span>Halifax, Nova Scotia, Canada</span> <MapPin className="w-4 h-4" /></p>
+              <div className=" gap-8 mt-12">
+                 
+            
+                     <p className="text-xs font-semibold text-zinc-400 uppercase tracking-widest">Get In Touch</p>
+                     <div className="space-y-4 text-zinc-600 font-medium w-fit text-left mt-4">
+                        <p className="flex items-center gap-3 text-sm"><Phone className="w-4 h-4 text-brand" /> <span>+1 (902) 403-7871</span></p>
+                        <p className="flex items-center gap-3 text-sm"><Mail className="w-4 h-4 text-brand" /> <span>info@opmediaagency.com</span></p>
+                        <p className="flex items-center gap-3 text-sm"><Globe className="w-4 h-4 text-brand" /> <span>opmediaagency.com</span></p>
+                        <p className="flex items-center gap-3 text-sm"><MapPin className="w-4 h-4 text-brand" /> <span>Halifax, Nova Scotia</span></p>
                      </div>
-                  </div>
+           
               </div>
             </div>
 
-            <hr className="border-brand opacity-20" />
+            <div className="h-px bg-linear-to-r from-transparent via-zinc-200 to-transparent" />
 
             {/* EXPERTISE SECTION */}
             <div className="flex flex-col items-center">
-               <div className="max-w-4xl w-full">
-                  <div className="bg-brand rounded-[30px] p-8 md:p-12 text-white text-center shadow-xl mb-12">
-                     <h2 className="text-3xl md:text-5xl font-black mb-2">Our Expertise Sections</h2>
-                     <p className="text-[10px] md:text-sm font-bold tracking-widest uppercase opacity-80 italic">OUR EXPERTISE SECTIONS ARE NOT LIMITED TO...</p>
+               <div className="max-w-6xl w-full">
+                  <div className="text-center mb-24">
+                     <p className="text-brand font-semibold text-xs md:text-xs tracking-widest uppercase mb-5">Our Expertise</p>
+                     <h2 className="text-5xl md:text-7xl font-black text-zinc-900 mb-6 leading-tight">Comprehensive Digital Services</h2>
+                     <p className="text-zinc-500 text-base md:text-lg font-medium max-w-3xl mx-auto">We specialize in a wide range of digital marketing and development solutions tailored to drive your business growth</p>
                   </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4 mb-20">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-12 md:gap-16">
                      {[
                        { label: 'WEB DEVELOPMENT', icon: Layout },
                        { label: 'GOOGLE ADS', icon: Target },
                        { label: 'CONTENT CREATION', icon: PlayCircle },
                        { label: 'FACEBOOK ADS', icon: Database },
-                       { label: 'SOCIAL MEDIA MARKETING', icon: Users }
-                     ].map((item, i) => (
-                       <div key={i} className="flex flex-col items-center gap-3">
-                          <div className="w-20 h-20 md:w-24 md:h-24 rounded-full border-4 border-brand/10 flex items-center justify-center relative">
-                            <div className="w-16 h-16 md:w-20 md:h-20 rounded-full bg-brand flex items-center justify-center shadow-lg">
-                               <item.icon className="w-8 h-8 md:w-10 md:h-10 text-white" />
-                            </div>
-                          </div>
-                          <h3 className="text-[10px] font-black text-zinc-900 text-center uppercase tracking-tighter leading-tight font-bold">{item.label}</h3>
-                       </div>
-                     ))}
-                  </div>
-
-                  <div className="bg-brand rounded-[30px] p-8 md:p-12 text-white text-center shadow-xl">
-                     <p className="text-[10px] md:text-sm font-bold tracking-widest uppercase mb-2 opacity-80 italic">ANY A FEW MORE TO BE A MULTI-CHANNEL MARKETING EXPERT</p>
-                     <h2 className="text-3xl md:text-5xl font-black">OUR Expertise Sections</h2>
-                  </div>
-
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4 mt-20">
-                     {[
-                       { label: 'WEB CONTENT CREATION', icon: Video },
+                       { label: 'SOCIAL MEDIA MARKETING', icon: Users },
+                       { label: 'WEB CONTENT', icon: Video },
                        { label: 'ARTICLE WRITING', icon: Loader2 },
                        { label: 'EMAIL MARKETING', icon: Mail },
-                       { label: 'SEARCH ENGINE OPTIMISATION', icon: Search },
+                       { label: 'SEO OPTIMIZATION', icon: Search },
                        { label: 'LEAD GENERATION', icon: Zap }
                      ].map((item, i) => (
-                       <div key={i} className="flex flex-col items-center gap-3">
-                          <div className="w-20 h-20 md:w-24 md:h-24 rounded-full border-4 border-brand/10 flex items-center justify-center relative">
-                            <div className="w-16 h-16 md:w-20 md:h-20 rounded-full bg-brand flex items-center justify-center shadow-lg">
-                               <item.icon className="w-8 h-8 md:w-10 md:h-10 text-white" />
-                            </div>
+                       <div key={i} className="flex flex-col items-center gap-3 group">
+                          <div className="w-20 h-20 md:w-24 md:h-24 rounded-xl bg-linear-to-br from-brand/15 to-brand/5 flex items-center justify-center shadow-md hover:shadow-lg hover:from-brand/25 hover:to-brand/10 transition-all duration-300 group-hover:scale-105">
+                            <item.icon className="w-9 h-9 md:w-11 md:h-11 text-brand group-hover:scale-110 transition-transform duration-300" />
                           </div>
-                          <h3 className="text-[10px] font-black text-zinc-900 text-center uppercase tracking-tighter leading-tight font-bold">{item.label}</h3>
+                          <h3 className="text-[10px] md:text-xs font-semibold text-zinc-700 text-center uppercase tracking-wide leading-tight group-hover:text-brand transition-colors duration-300">{item.label}</h3>
                        </div>
                      ))}
+                  </div>
+
+                  <div className="mt-24 bg-linear-to-r from-brand/5 via-transparent to-brand/5 rounded-2xl p-12 md:p-16 border border-brand/10 text-center">
+                     <p className="text-zinc-600 text-base md:text-lg font-medium leading-relaxed">Our expert team combines cutting-edge technology with strategic insights to deliver solutions that not only meet your current needs but anticipate future market trends and opportunities.</p>
                   </div>
                </div>
             </div>
 
-            <hr className="border-brand opacity-20" />
+            <div className="h-px bg-linear-to-r from-transparent via-zinc-200 to-transparent" />
 
             {/* DYNAMIC SECTIONS */}
-            {proposal.sections.map((section, sidx) => (
+            {(proposal.sections ?? []).map((section) => (
               <div key={section.id} className="flex flex-col">
                  <div className="max-w-4xl mx-auto w-full flex flex-col">
-                    <div className="bg-brand rounded-xl py-4 px-10 text-center mb-10 shadow-lg proposal-header-box">
-                       <h2 className="text-white text-3xl font-black tracking-tight uppercase border-none outline-none">{section.title}</h2>
+                    <div className="flex items-center gap-4 mb-16">
+                       <div className="h-1.5 w-12 bg-brand rounded-full" />
+                       <h2 className="text-zinc-900 text-4xl md:text-6xl font-black tracking-tighter">{section.title}</h2>
                     </div>
-                    
-                    <div className="flex-1 max-w-[700px] mx-auto markdown-content">
-                      <ReactMarkdown 
-                        remarkPlugins={[remarkGfm]} 
+
+                    <div className="prose prose-base md:prose-lg max-w-4xl mx-auto markdown-content text-zinc-600 leading-relaxed space-y-5">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
                         rehypePlugins={[rehypeRaw]}
                       >
                         {section.content}
                       </ReactMarkdown>
                     </div>
-                    
-                    {sidx === 0 && (
-                       <div className="mt-8 bg-zinc-50 p-8 rounded-3xl border border-zinc-100 flex items-center gap-6">
-                          <div className="w-16 h-16 rounded-2xl bg-brand flex items-center justify-center text-white shadow-lg shrink-0">
-                             <Target className="w-8 h-8" />
-                          </div>
-                          <div>
-                             <p className="text-xs font-black uppercase tracking-widest text-brand mb-1">Key Growth Metric</p>
-                             <p className="text-xl font-black text-zinc-900 italic tracking-tight underline decoration-brand decoration-2 underline-offset-4">Maximize Digital ROI & Lead Flow</p>
-                          </div>
-                       </div>
-                    )}
                  </div>
               </div>
             ))}
 
-            <hr className="border-brand opacity-20" />
+            <div className="h-px bg-linear-to-r from-transparent via-zinc-200 to-transparent" />
 
             {/* PRICING / INVESTMENT */}
             {((proposal.pricingPlans && proposal.pricingPlans.length > 0) || (proposal as any).pricingPlan) && (
-              <div className="flex flex-col items-center justify-center py-12 md:py-20 bg-zinc-950 rounded-[30px] md:rounded-[40px] text-white overflow-hidden relative px-6 md:px-10">
-                 <div className="absolute top-0 right-0 w-64 h-64 bg-brand/10 blur-3xl" />
-                 <div className="absolute bottom-0 left-0 w-64 h-64 bg-brand/5 blur-3xl" />
-                 
-                 <div className="max-w-6xl w-full text-center space-y-12 relative z-10">
-                    <div className="space-y-2">
-                       <p className="text-brand font-black uppercase tracking-[0.3em] text-[10px] md:text-xs">Strategic Partnership</p>
-                       <h2 className="text-4xl md:text-[82px] font-black tracking-tighter italic leading-none">The Investment</h2>
+              <div className="flex flex-col items-center justify-center py-20 md:py-32 bg-zinc-900 rounded-3xl text-white overflow-hidden relative px-6 md:px-12 border border-zinc-800">
+                 <div className="absolute top-0 right-0 w-96 h-96 bg-brand/5 blur-3xl" />
+                 <div className="absolute bottom-0 left-0 w-96 h-96 bg-brand/5 blur-3xl" />
+
+                 <div className="max-w-6xl w-full text-center space-y-16 relative z-10">
+                    <div className="space-y-5">
+                       <p className="text-brand font-semibold uppercase tracking-widest text-xs md:text-xs">Investment & Pricing</p>
+                       <h2 className="text-5xl md:text-7xl font-black tracking-tighter leading-none">Strategic Partnership Plans</h2>
                     </div>
 
                     <div className={cn(
-                      "grid gap-8 w-full",
+                      "grid gap-10 w-full",
                       (proposal.pricingPlans?.length || 0) > 1 ? "md:grid-cols-2 lg:grid-cols-3" : "max-w-2xl mx-auto"
                     )}>
                       {proposal.pricingPlans && proposal.pricingPlans.length > 0 ? (
                         proposal.pricingPlans.map((plan, pidx) => (
-                          <div key={pidx} className="bg-white/5 border border-white/10 p-5 md:p-6 rounded-[30px] md:rounded-[40px] shadow-2xl relative overflow-hidden group flex flex-col text-left">
-                             <div className="mb-4">
-                                <Badge className="bg-brand text-white border-none px-4 py-1.5 rounded-full font-black uppercase text-[8px] tracking-widest mb-3">
-                                   {plan.label} MODEL
+                          <div key={pidx} className="bg-white/5 border border-white/10 p-8 md:p-10 rounded-3xl shadow-lg relative overflow-hidden group flex flex-col text-left hover:bg-white/10 transition-colors">
+                             <div className="mb-6">
+                                <Badge className="bg-brand text-white border-none px-4 py-2 rounded-full font-semibold uppercase text-xs tracking-widest mb-4">
+                                   {plan.label}
                                 </Badge>
-                                 <div className="text-xl md:text-3xl font-black tracking-tighter mb-1 truncate overflow-hidden whitespace-nowrap">
+                                 <div className="text-3xl md:text-4xl font-black tracking-tight mb-2 leading-none">
                                     {formatCurrency(plan.value, proposal.currency)}
-                                    <span className="text-sm font-bold text-zinc-500 ml-1">/mo</span>
+                                    <span className="text-lg font-medium text-zinc-400 ml-2">/mo</span>
                                  </div>
                              </div>
                              
-                             <div className="h-px bg-white/10 w-full mb-4" />
-                             
-                             <div className="space-y-3 flex-1">
-                                {plan.items.map((item, i) => (
+                             <div className="h-px bg-white/10 w-full mb-6" />
+
+                             <div className="space-y-4 flex-1">
+                                {(plan.items ?? []).map((item, i) => (
                                   <div key={i} className="flex items-start gap-3">
-                                     <CheckCircle2 className="w-3.5 h-3.5 text-brand shrink-0 mt-0.5" />
-                                     <span className="font-bold text-[9px] md:text-[10px] text-zinc-300 leading-snug">{item}</span>
+                                     <CheckCircle2 className="w-4 h-4 text-brand shrink-0 mt-0.5" />
+                                     <span className="font-medium text-sm text-zinc-300 leading-snug">{item}</span>
                                   </div>
                                 ))}
                              </div>
                           </div>
                         ))
                       ) : (proposal as any).pricingPlan ? (
-                        <div className="bg-white/5 border border-white/10 p-6 md:p-10 rounded-[30px] md:rounded-[60px] shadow-2xl relative overflow-hidden group text-center max-w-2xl mx-auto w-full">
-                           <Badge className="bg-brand text-white border-none px-6 py-2 rounded-full font-black uppercase text-[10px] tracking-widest mb-6">
+                        <div className="bg-white/5 border border-white/10 p-10 md:p-14 rounded-3xl shadow-lg relative overflow-hidden group text-center max-w-2xl mx-auto w-full hover:bg-white/10 transition-colors">
+                           <Badge className="bg-brand text-white border-none px-5 py-2 rounded-full font-semibold uppercase text-xs tracking-widest mb-6">
                               {(proposal as any).pricingPlan.type} Strategy
                            </Badge>
-                           <div className="text-3xl md:text-5xl font-black tracking-tighter mb-8 leading-none truncate overflow-hidden whitespace-nowrap">
+                           <div className="text-4xl md:text-5xl font-black tracking-tight mb-8 leading-none">
                               {formatCurrency((proposal as any).pricingPlan.value, proposal.currency)}
-                              <span className="text-lg md:text-xl font-bold text-zinc-500 ml-2">/month</span>
+                              <span className="text-lg md:text-xl font-medium text-zinc-400 ml-2">/month</span>
                            </div>
                            <div className="h-px bg-white/10 w-full mb-8" />
-                           <div className="grid grid-cols-1 gap-4 md:gap-6 text-left max-w-lg mx-auto">
+                           <div className="grid grid-cols-1 gap-5 md:gap-6 text-left max-w-lg mx-auto">
                               {((proposal as any).pricingPlan.items && (proposal as any).pricingPlan.items.length > 0 ? (proposal as any).pricingPlan.items : (proposal.services || [])).map((item: string, i: number) => (
                                 <div key={i} className="flex items-start gap-4">
-                                   <CheckCircle2 className="w-4 h-4 md:w-5 md:h-5 text-brand shrink-0 mt-0.5" />
-                                   <span className="font-bold text-sm md:text-lg text-zinc-300">{item}</span>
+                                   <CheckCircle2 className="w-5 h-5 text-brand shrink-0 mt-0.5" />
+                                   <span className="font-medium text-base text-zinc-300">{item}</span>
                                 </div>
                               ))}
                            </div>
@@ -560,7 +508,7 @@ export const ProposalPreview = () => {
                       ) : null}
                     </div>
                     
-                    <p className="text-zinc-500 font-medium italic">Investment amounts are in {proposal.currency}. Monthly management fees exclude third-party ad spend which is paid directly to platforms.</p>
+                    <p className="text-zinc-400 font-medium text-sm">Investment amounts are in {proposal.currency}. Monthly management fees exclude third-party ad spend which is paid directly to platforms.</p>
                  </div>
               </div>
             )}
@@ -570,42 +518,50 @@ export const ProposalPreview = () => {
             {/* CONCLUSION & SIGNATURE */}
             <div className="flex flex-col">
                <div className="max-w-4xl w-full flex flex-col mx-auto">
-                  
-                  <div className="bg-brand rounded-2xl py-4 px-10 mb-12">
-                     <h2 className="text-white text-3xl font-black tracking-tight">Final Impact</h2>
+
+                  <div className="flex items-center gap-4 mb-18">
+                     <div className="h-1.5 w-12 bg-brand rounded-full" />
+                     <h2 className="text-zinc-900 text-5xl md:text-6xl font-black tracking-tighter">Conclusion</h2>
                   </div>
 
-                  <div className="grid gap-4 mb-20">
-                     {[
-                       "Strong brand authority & festival hype",
-                       "Consistent ticket sales growth",
-                       "Massive reach & audience building",
-                       "Increased sales through retargeting"
-                     ].map((it, i) => (
-                       <div key={i} className="flex items-center gap-4 text-xl font-black text-zinc-800">
-                          <CheckCircle2 className="w-6 h-6 text-brand" /> {it}
-                       </div>
-                     ))}
+                  <div className="text-base md:text-lg text-zinc-600 leading-relaxed space-y-7 mb-20">
+                     <p>We are excited about the opportunity to partner with <span className="text-brand font-semibold">{proposal.clientName}</span> and drive measurable growth for your business.</p>
+                     <p>Our comprehensive digital marketing approach is designed to build sustainable brand authority, generate qualified leads, and deliver consistent, high-quality results that directly impact your bottom line.</p>
                   </div>
 
-                  <h2 className="text-5xl md:text-[100px] font-black text-brand tracking-tighter leading-none mb-8 italic text-center md:text-left uppercase">Conclusion</h2>
-                  <div className="text-lg md:text-xl font-bold text-zinc-600 leading-relaxed space-y-6 text-center md:text-left">
-                     <p>We would welcome the opportunity to work with <span className="text-brand font-black italic">{proposal.clientName}</span> and contribute to your success.</p>
-                     <p>Our goal is to build a powerful digital marketing system that consistently drives high-quality sales and brand value.</p>
-                  </div>
-
-                  <div className="flex flex-col items-center justify-center py-10 md:py-16">
-                     <p className="text-6xl md:text-[120px] text-brand font-handwritten -rotate-3 drop-shadow-md">Thank You!</p>
-                  </div>
-
-                  <div className="mt-auto pt-10 border-t-4 border-brand flex flex-col md:flex-row justify-between items-center md:items-end gap-10">
-                     <div className="space-y-4 text-center md:text-left">
-                        <p className="text-xl font-black text-zinc-900 uppercase">Prepared By:</p>
-                        <p className="text-3xl font-black text-brand leading-none">{proposal.creatorName || creatorData?.name || 'OP Media Strategist'}</p>
+                  <div className="bg-brand/5 border border-brand/20 rounded-2xl p-10 md:p-14 mb-20">
+                     <p className="text-xs font-semibold text-brand uppercase tracking-widest mb-6">Expected Outcomes</p>
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-7">
+                        {[
+                          "Enhanced brand visibility and authority",
+                          "Increased qualified lead generation",
+                          "Improved conversion rates",
+                          "Sustainable growth trajectory"
+                        ].map((it, i) => (
+                          <div key={i} className="flex items-start gap-4">
+                             <CheckCircle2 className="w-5 h-5 text-brand shrink-0 mt-1" />
+                             <span className="font-medium text-zinc-700 text-sm md:text-base">{it}</span>
+                          </div>
+                        ))}
                      </div>
-                     <div className="flex flex-col md:items-end gap-2 text-brand font-black text-lg italic text-center md:text-right">
-                        <p>www.opmediaagency.com</p>
-                        <p>info@opmediaagency.com</p>
+                  </div>
+
+                  <div className="text-center mb-20">
+                     <p className="text-5xl md:text-6xl text-zinc-900 font-black tracking-tighter">Ready to Begin?</p>
+                  </div>
+
+                  <div className="border-t-2 border-zinc-200 pt-16 flex flex-col md:flex-row justify-between items-start md:items-end gap-10">
+                     <div className="space-y-4">
+                        <p className="text-xs font-semibold text-zinc-400 uppercase tracking-widest letter-spacing">Prepared By</p>
+                        <p className="text-3xl font-black text-zinc-900">{proposal.creatorName || 'OP Media Strategist'}</p>
+                        <p className="text-sm text-zinc-500 font-medium">Strategic Digital Growth Specialist</p>
+                     </div>
+                     <div className="flex flex-col gap-4 text-right">
+                        <p className="text-xs font-semibold text-zinc-400 uppercase tracking-widest">Contact</p>
+                        <div className="space-y-3 text-zinc-600 font-medium text-sm">
+                           <p>www.opmediaagency.com</p>
+                           <p>info@opmediaagency.com</p>
+                        </div>
                      </div>
                   </div>
                </div>

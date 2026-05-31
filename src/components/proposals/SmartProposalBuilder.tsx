@@ -1,7 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { doc, getDoc, setDoc, addDoc, collection, serverTimestamp, updateDoc } from 'firebase/firestore';
-import { db } from '@/src/lib/firebase';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  createProposal,
+  generateProposalContent,
+  getProposal,
+  searchProposalClients,
+  updateProposal,
+} from '@/src/api/endpoints/proposals.api';
+import type { CreateProposalRequest, UpdateProposalRequest } from '@/src/api/endpoints/proposals.api';
+import { queryKeys } from '@/src/shared/constants/query-keys';
 import { useAuth } from '@/src/App';
 import { Proposal, ProposalSection, ProposalStatus } from '@/src/types';
 import { Button } from '@/components/ui/button';
@@ -10,19 +18,19 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { 
-  FileText, Plus, Trash2, ArrowLeft, Save, Sparkles, 
-  Layout, DollarSign, Clock, CheckCircle2, ChevronRight, 
+import {
+  FileText, Plus, Trash2, ArrowLeft, Save, Sparkles,
+  Layout, DollarSign, Clock, CheckCircle2, ChevronRight,
   ChevronLeft, Eye, Send, Target, Zap, Globe, MapPin,
   Building2, Users, BarChart3, Briefcase, Rocket,
   Palette, Video, Share2, Filter, Bot, TrendingUp,
-  Mail, PieChart, Search, Magnet, BadgeCheck
+  Mail, PieChart, Search, Magnet, BadgeCheck, Loader2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
 import { BrandLogo } from '@/src/components/layout/BrandLogo';
-import { generateSmartProposalContent, suggestProposalTitle } from '@/src/services/geminiService';
 import { cn } from '@/src/lib/utils';
+import { ProposalToolbar, ToolbarLeft, ToolbarRight } from '@/src/components/proposals/ProposalToolbar';
 
 const STEPS = [
   { id: 'client', title: 'Client Info', icon: Building2 },
@@ -79,15 +87,14 @@ export const SmartProposalBuilder = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  
+  const queryClient = useQueryClient();
+
   const basePath = user?.role === 'super_admin' || user?.role === 'admin' ? '/admin' : '/employee';
 
   const [currentStep, setCurrentStep] = useState(0);
-  const [loading, setLoading] = useState(!!id);
-  const [saving, setSaving] = useState(false);
-  const [generating, setGenerating] = useState(false);
   const [isCustomIndustry, setIsCustomIndustry] = useState(false);
   const [availablePackages, setAvailablePackages] = useState(PRICING_PACKAGES);
+  const [clientQ, setClientQ] = useState('');
 
   // Form State
   const [formData, setFormData] = useState<Partial<Proposal>>({
@@ -109,45 +116,51 @@ export const SmartProposalBuilder = () => {
     status: 'draft'
   });
 
+  // Edit mode: load existing proposal
+  const proposalQuery = useQuery({
+    queryKey: queryKeys.proposal(id!),
+    queryFn: () => getProposal(id!),
+    enabled: !!id,
+  });
+
+  const loading = !!id && proposalQuery.isLoading;
+
   useEffect(() => {
-    if (id) {
-      loadProposal(id);
-    }
-  }, [id]);
-
-  const loadProposal = async (proposalId: string) => {
-    try {
-      const docSnap = await getDoc(doc(db, 'proposals', proposalId));
-      if (docSnap.exists()) {
-        const data = docSnap.data() as Proposal;
-        setFormData({ id: docSnap.id, ...data });
-        
-        // Load custom pricing plans into available packages
-        if (data.pricingPlans && data.pricingPlans.length > 0) {
-          const stored = data.pricingPlans.map(p => ({
-            id: p.id,
-            label: p.label,
-            price: p.value,
-            features: [...p.items]
-          }));
-          
-          setAvailablePackages(prev => {
-            const others = prev.filter(p => !stored.find(s => s.id === p.id));
-            return [...stored, ...others];
-          });
-        }
-
-        // Check if industry is custom
-        if (data.industry && !INDUSTRIES.slice(0, -1).includes(data.industry)) {
-          setIsCustomIndustry(true);
-        }
+    if (proposalQuery.data) {
+      const data = proposalQuery.data;
+      setFormData({ ...data });
+      if (data.pricingPlans && data.pricingPlans.length > 0) {
+        const stored = data.pricingPlans.map(p => ({
+          id: p.id,
+          label: p.label,
+          price: p.value,
+          features: [...(p.items ?? [])]
+        }));
+        setAvailablePackages(prev => {
+          const others = prev.filter(p => !stored.find(s => s.id === p.id));
+          return [...stored, ...others];
+        });
       }
-    } catch (err) {
-      toast.error("Failed to load proposal");
-    } finally {
-      setLoading(false);
+      if (data.industry && !INDUSTRIES.slice(0, -1).includes(data.industry)) {
+        setIsCustomIndustry(true);
+      }
     }
-  };
+  }, [proposalQuery.data]);
+
+  useEffect(() => {
+    if (proposalQuery.isError) {
+      toast.error('Failed to load proposal');
+      navigate(`${basePath}/proposals`);
+    }
+  }, [proposalQuery.isError]);
+
+  // Client search
+  const clientSearchQuery = useQuery({
+    queryKey: ['proposal-client-search', clientQ],
+    queryFn: () => searchProposalClients(clientQ),
+    enabled: clientQ.length >= 2,
+    staleTime: 10_000,
+  });
 
   const updateFormData = (updates: Partial<Proposal>) => {
     setFormData(prev => ({ ...prev, ...updates }));
@@ -247,78 +260,83 @@ export const SmartProposalBuilder = () => {
     }
   };
 
-  const handleGenerateAI = async () => {
+  // AI content generation mutation
+  const generateMutation = useMutation({
+    mutationFn: (data: Partial<Proposal>) =>
+      generateProposalContent({
+        clientName: data.clientName!,
+        businessName: data.businessName ?? undefined,
+        location: data.location ?? undefined,
+        businessDescription: data.businessDescription ?? undefined,
+        targetAudience: data.targetAudience ?? undefined,
+        industry: data.industry ?? undefined,
+        goals: Array.isArray(data.goals) ? data.goals : undefined,
+        services: data.services ?? undefined,
+        monthlyBudget: data.monthlyBudget ?? undefined,
+        currency: data.currency ?? undefined,
+        pricingPlans: data.pricingPlans,
+      }),
+    onSuccess: (result) => {
+      updateFormData({ sections: result.sections });
+      toast.success('AI Proposal Generated!');
+      setCurrentStep(4);
+    },
+    onError: (error: Error) => {
+      toast.error('AI Generation failed', { description: error.message });
+    },
+  });
+
+  const handleGenerateAI = () => {
     if (!formData.clientName) {
-      toast.error("Please enter client details first");
+      toast.error('Please enter client details first');
       setCurrentStep(0);
       return;
     }
-
-    setGenerating(true);
-    const toastId = toast.loading("AI is crafting your agency proposal...");
-
-    try {
-      const sections: ProposalSection[] = [];
-      
-      const about = await generateSmartProposalContent('about', formData);
-      sections.push({ id: 'about', title: 'About the Project', content: about, type: 'text' });
-      
-      const problem = await generateSmartProposalContent('problem_solution', formData);
-      sections.push({ id: 'problem', title: 'The Problem & Our Solution', content: problem, type: 'text' });
-      
-      const strategy = await generateSmartProposalContent('strategy', formData);
-      sections.push({ id: 'strategy', title: 'Strategic Growth Roadmap', content: strategy, type: 'text' });
-      
-      const deliverables = await generateSmartProposalContent('deliverables', formData);
-      sections.push({ id: 'deliverables', title: 'Monthly Deliverables', content: deliverables, type: 'services' });
-      
-      const cta = await generateSmartProposalContent('cta', formData);
-      sections.push({ id: 'cta', title: 'Next Steps & Call to Action', content: cta, type: 'text' });
-
-      updateFormData({ sections });
-      toast.success("AI Proposal Generated!", { id: toastId });
-      setCurrentStep(4); // Go to review
-    } catch (err) {
-      toast.error("AI Generation failed", { id: toastId });
-    } finally {
-      setGenerating(false);
-    }
+    generateMutation.mutate(formData);
   };
 
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      const adminId = user?.role === 'admin' ? user.uid : user?.adminId || user?.uid;
-      const totalValue = formData.pricingPlans?.reduce((sum, p) => sum + p.value, 0) || 0;
-      
-      const finalData = {
-        ...formData,
-        adminId,
-        createdBy: user?.uid,
-        creatorName: user?.name,
-        updatedAt: serverTimestamp(),
-        totalValue: totalValue
-      };
+  // Create and update mutations
+  const createMutation = useMutation({
+    mutationFn: (body: CreateProposalRequest) => createProposal(body),
+    onSuccess: (created) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.proposals() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.proposalSummary });
+      toast.success('Proposal created');
+      navigate(`${basePath}/proposals/edit/${created.id}`);
+    },
+    onError: (error: Error) => {
+      toast.error('Failed to create proposal', { description: error.message });
+    },
+  });
 
-      if (!finalData.title) {
-        finalData.title = `Proposal for ${formData.businessName || formData.clientName}`;
-      }
+  const updateMutation = useMutation({
+    mutationFn: ({ id, body }: { id: string; body: UpdateProposalRequest }) =>
+      updateProposal(id, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.proposals() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.proposal(id!) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.proposalSummary });
+      toast.success('Proposal updated');
+    },
+    onError: (error: Error) => {
+      toast.error('Failed to save proposal', { description: error.message });
+    },
+  });
 
-      if (id) {
-        await updateDoc(doc(db, 'proposals', id), finalData);
-        toast.success("Proposal updated");
-      } else {
-        const docRef = await addDoc(collection(db, 'proposals'), {
-          ...finalData,
-          createdAt: serverTimestamp()
-        });
-        toast.success("Proposal created");
-        navigate(`${basePath}/proposals/edit/${docRef.id}`);
-      }
-    } catch (err) {
-      toast.error("Failed to save proposal");
-    } finally {
-      setSaving(false);
+  const saving = createMutation.isPending || updateMutation.isPending;
+  const generating = generateMutation.isPending;
+
+  const handleSave = () => {
+    const totalValue = formData.pricingPlans?.reduce((s, p) => s + (p.value ?? 0), 0) ?? 0;
+    const title = formData.title || `Proposal for ${formData.businessName || formData.clientName}`;
+
+    if (id) {
+      updateMutation.mutate({
+        id,
+        body: { ...formData, title, totalValue } as UpdateProposalRequest,
+      });
+    } else {
+      createMutation.mutate({ ...formData, title, totalValue } as CreateProposalRequest);
     }
   };
 
@@ -326,53 +344,50 @@ export const SmartProposalBuilder = () => {
 
   return (
     <div className="min-h-screen bg-zinc-50/50 pb-24">
-      {/* SaaS Style Nav */}
-      <div className="sticky top-0 z-[100] bg-white border-b border-zinc-200 px-6 py-4">
-        <div className="max-w-5xl mx-auto flex items-center justify-between">
+      <ProposalToolbar sticky>
+        <ToolbarLeft className="gap-4">
+          <Button variant="ghost" size="icon" onClick={() => navigate(`${basePath}/proposals`)} className="rounded-full">
+            <ArrowLeft className="w-5 h-5" />
+          </Button>
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => navigate(`${basePath}/proposals`)} className="rounded-full">
-              <ArrowLeft className="w-5 h-5" />
-            </Button>
-            <div className="flex items-center gap-4">
-              <BrandLogo className="h-10 w-auto md:h-12" />
-              <div className="h-8 w-px bg-zinc-200" />
-              <div>
-                <h1 className="text-xl font-black text-zinc-900 tracking-tight">Proposal Builder</h1>
-                <p className="text-xs text-zinc-400 font-bold uppercase tracking-widest leading-none mt-1">Growth OS for Marketing Agencies</p>
-              </div>
+            <BrandLogo className="h-10 w-auto md:h-12" />
+            <div className="h-8 w-px bg-zinc-200" />
+            <div>
+              <h1 className="text-xl font-black text-zinc-900 tracking-tight">Proposal Builder</h1>
+              <p className="text-xs text-zinc-400 font-bold uppercase tracking-widest leading-none mt-1">Growth OS for Marketing Agencies</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-             <Button variant="outline" className="rounded-full px-6 border-zinc-200" onClick={handleSave} disabled={saving}>
-               {saving ? 'Saving...' : 'Save Draft'}
-             </Button>
-             <Button className="bg-brand text-white hover:bg-brand/90 rounded-full px-6 shadow-lg shadow-brand/20 border-none" onClick={() => navigate(`${basePath}/proposals/preview/${id}`)} disabled={!id}>
-               <Eye className="w-4 h-4 mr-2" />
-               Live Preview
-             </Button>
-          </div>
-        </div>
-      </div>
+        </ToolbarLeft>
+        <ToolbarRight>
+           <Button variant="outline" className="rounded-full px-6 border-zinc-200" onClick={handleSave} disabled={saving}>
+             {saving ? 'Saving...' : 'Save Draft'}
+           </Button>
+           <Button className="bg-brand text-white hover:bg-brand/90 rounded-full px-6 shadow-lg shadow-brand/20 border-none" onClick={() => navigate(`${basePath}/proposals/preview/${id}`)} disabled={!id}>
+             <Eye className="w-4 h-4 mr-2" />
+             Live Preview
+           </Button>
+        </ToolbarRight>
+      </ProposalToolbar>
 
       {/* Stepper */}
       <div className="max-w-4xl mx-auto mt-8 px-4">
         <div className="flex items-center justify-between mb-12">
           {STEPS.map((step, idx) => (
-            <div key={step.id} className="flex flex-col items-center gap-2 relative z-10">
+            <div key={step.id} className="flex flex-col items-center gap-2 relative z-10 flex-1">
                <div className={cn(
-                 "w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-300",
-                 currentStep === idx ? "bg-brand text-white shadow-xl shadow-brand/30 scale-110" : 
+                 "w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300 shrink-0",
+                 currentStep === idx ? "bg-brand text-white shadow-lg shadow-brand/20 scale-110" :
                  currentStep > idx ? "bg-zinc-900 text-white" : "bg-white border border-zinc-200 text-zinc-400"
                )}>
-                 <step.icon className="w-6 h-6" />
+                 <step.icon className="w-5 h-5" />
                </div>
                <span className={cn(
-                 "text-[10px] font-black uppercase tracking-tighter",
+                 "text-[10px] font-black uppercase tracking-tighter text-center",
                  currentStep === idx ? "text-brand" : "text-zinc-400"
                )}>{step.title}</span>
                {idx < STEPS.length - 1 && (
                  <div className={cn(
-                   "absolute top-6 left-full w-[calc(100%)] h-[2px] -z-10",
+                   "absolute top-5 left-[calc(50%+20px)] right-0 h-[2px] -z-10",
                    currentStep > idx ? "bg-zinc-900" : "bg-zinc-100"
                  )} />
                )}
@@ -392,21 +407,52 @@ export const SmartProposalBuilder = () => {
                 className="space-y-6"
               >
                 <div className="text-center mb-8">
-                   <h2 className="text-4xl font-black text-zinc-900 tracking-tighter italic">Client Foundation</h2>
-                   <p className="text-zinc-500 font-bold italic tracking-wide uppercase text-sm">Tell us who we are growing today</p>
+                   <h2 className="text-2xl font-bold text-zinc-900 tracking-tight">Client Foundation</h2>
+                   <p className="text-zinc-500 text-sm">Tell us who we are growing today</p>
                 </div>
 
-                <Card className="border-zinc-200 shadow-xl shadow-zinc-200/50 rounded-3xl overflow-hidden">
+                <Card className="border-zinc-200 shadow-sm rounded-2xl overflow-hidden">
                   <CardContent className="p-8 space-y-6">
                     <div className="grid grid-cols-2 gap-6">
                       <div className="space-y-2">
                         <Label className="text-xs font-black uppercase tracking-widest text-zinc-400">Client Name</Label>
-                        <Input 
-                          value={formData.clientName} 
-                          onChange={e => updateFormData({ clientName: e.target.value })} 
-                          placeholder="e.g. John Smith"
-                          className="h-12 border-zinc-200 focus:ring-brand rounded-xl font-bold"
-                        />
+                        <div className="relative">
+                          <Input
+                            value={formData.clientName}
+                            onChange={e => {
+                              updateFormData({ clientName: e.target.value });
+                              setClientQ(e.target.value);
+                            }}
+                            placeholder="e.g. John Smith"
+                            className="h-12 border-zinc-200 focus:ring-brand rounded-xl font-bold"
+                          />
+                          {clientSearchQuery.data && clientSearchQuery.data.length > 0 && clientQ.length >= 2 && (
+                            <motion.div
+                              initial={{ opacity: 0, y: -10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              className="absolute top-full left-0 right-0 mt-2 bg-white border border-zinc-200 rounded-xl shadow-lg z-50"
+                            >
+                              {clientSearchQuery.data.slice(0, 5).map((client) => (
+                                <div
+                                  key={client.id}
+                                  onClick={() => {
+                                    updateFormData({
+                                      clientName: client.name,
+                                      clientEmail: client.email,
+                                      businessName: client.company || formData.businessName,
+                                    });
+                                    setClientQ('');
+                                  }}
+                                  className="p-3 border-b border-zinc-100 last:border-b-0 cursor-pointer hover:bg-zinc-50 transition-colors"
+                                >
+                                  <p className="text-sm font-bold text-zinc-900">{client.name}</p>
+                                  <p className="text-xs text-zinc-500">{client.email}</p>
+                                  {client.company && <p className="text-xs text-zinc-400">{client.company}</p>}
+                                </div>
+                              ))}
+                            </motion.div>
+                          )}
+                        </div>
                       </div>
                       <div className="space-y-2">
                         <Label className="text-xs font-black uppercase tracking-widest text-zinc-400">Business Name</Label>
@@ -496,8 +542,8 @@ export const SmartProposalBuilder = () => {
                 className="space-y-6"
               >
                  <div className="text-center mb-8">
-                   <h2 className="text-4xl font-black text-zinc-900 tracking-tighter italic">Growth Strategy</h2>
-                   <p className="text-zinc-500 font-bold italic tracking-wide uppercase text-sm">Building the machine for results</p>
+                   <h2 className="text-2xl font-bold text-zinc-900 tracking-tight">Growth Strategy</h2>
+                   <p className="text-zinc-500 text-sm">Building the machine for results</p>
                 </div>
 
                 <div className="space-y-8">
@@ -507,9 +553,9 @@ export const SmartProposalBuilder = () => {
                         key={s.id}
                         onClick={() => toggleService(s.label)}
                         className={cn(
-                          "p-6 rounded-[32px] border-2 transition-all flex flex-col items-center gap-3 text-center group relative overflow-hidden",
-                          formData.services?.includes(s.label) 
-                            ? "border-brand bg-brand/5 shadow-xl shadow-brand/10" 
+                          "p-6 rounded-2xl border-2 transition-all flex flex-col items-center gap-3 text-center group relative overflow-hidden",
+                          formData.services?.includes(s.label)
+                            ? "border-brand bg-brand/5 shadow-md"
                             : "border-zinc-100 bg-white hover:border-brand/40"
                         )}
                       >
@@ -532,10 +578,10 @@ export const SmartProposalBuilder = () => {
                     ))}
                   </div>
 
-                  <Card className="border-zinc-200 shadow-xl shadow-zinc-200/50 rounded-3xl overflow-hidden">
+                  <Card className="border-zinc-200 shadow-sm rounded-2xl overflow-hidden">
                     <CardContent className="p-8 space-y-6">
                         <div className="space-y-4">
-                           <Label className="text-xs font-black uppercase tracking-widest text-zinc-400">Primary Growth Goals (Select multiple)</Label>
+                           <Label className="text-xs font-black uppercase tracking-widest text-zinc-400">Growth Goals</Label>
                            <div className="flex flex-wrap gap-2">
                              {GROWTH_GOALS.map(goal => {
                                const isSelected = (formData.goals as string[])?.includes(goal);
@@ -595,19 +641,19 @@ export const SmartProposalBuilder = () => {
                 className="space-y-6"
               >
                  <div className="text-center mb-8">
-                   <h2 className="text-4xl font-black text-zinc-900 tracking-tighter italic">Investment Models</h2>
-                   <p className="text-zinc-500 font-bold italic tracking-wide uppercase text-sm">Packages designed to convert</p>
+                   <h2 className="text-2xl font-bold text-zinc-900 tracking-tight">Investment Models</h2>
+                   <p className="text-zinc-500 text-sm">Packages designed to convert</p>
                 </div>
 
                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   {availablePackages.map(p => {
                     const isSelected = !!formData.pricingPlans?.find(plan => plan.id === p.id);
                     return (
-                      <Card 
-                        key={p.id} 
+                      <Card
+                        key={p.id}
                         className={cn(
-                          "relative border-2 transition-all rounded-[40px] overflow-hidden group bg-white",
-                          isSelected ? "border-brand shadow-2xl scale-105 z-10" : "border-zinc-100 hover:border-brand/20 shadow-xl shadow-zinc-200/50"
+                          "relative border-2 transition-all rounded-2xl overflow-hidden group bg-white",
+                          isSelected ? "border-brand shadow-lg scale-105 z-10" : "border-zinc-100 hover:border-brand/20 shadow-sm"
                         )}
                       >
                          <div className="p-5 pb-3">
@@ -703,28 +749,28 @@ export const SmartProposalBuilder = () => {
                 className="space-y-6"
               >
                  <div className="text-center mb-8">
-                   <h2 className="text-4xl font-black text-zinc-900 tracking-tighter italic">AI Magic</h2>
-                   <p className="text-zinc-500 font-bold italic tracking-wide uppercase text-sm">Generating high-impact agency content</p>
+                   <h2 className="text-2xl font-bold text-zinc-900 tracking-tight">AI Magic</h2>
+                   <p className="text-zinc-500 text-sm">Generate high-impact agency content</p>
                 </div>
 
                 <div className="flex flex-col items-center justify-center py-20 gap-8">
                    <div className="relative">
-                      <div className="w-32 h-32 rounded-[40px] bg-brand/10 flex items-center justify-center animate-pulse">
+                      <div className="w-32 h-32 rounded-2xl bg-brand/10 flex items-center justify-center animate-pulse">
                          <Sparkles className="w-16 h-16 text-brand" />
                       </div>
-                      <div className="absolute -top-4 -right-4 w-12 h-12 rounded-full bg-zinc-900 flex items-center justify-center shadow-xl border-4 border-white">
+                      <div className="absolute -top-4 -right-4 w-12 h-12 rounded-full bg-zinc-900 flex items-center justify-center shadow-lg border-4 border-white">
                          <Rocket className="w-5 h-5 text-white" />
                       </div>
                    </div>
-                   
+
                    <div className="max-w-md text-center space-y-4">
-                      <h3 className="text-2xl font-black text-zinc-900">Ready to Generate?</h3>
-                      <p className="text-zinc-500 font-bold tracking-tight">Our AI will process your client inputs to draft about sections, strategies, solutions, and a powerful CTA—all in the OP Media signature style.</p>
+                      <h3 className="text-xl font-bold text-zinc-900">Ready to Generate?</h3>
+                      <p className="text-zinc-500 text-sm">Our AI will create sections, strategies, and CTAs in the OP Media style.</p>
                    </div>
 
-                   <Button 
-                     size="lg" 
-                     className="h-16 px-12 bg-zinc-900 text-white hover:bg-zinc-800 rounded-[20px] shadow-2xl border-none text-lg font-black italic scale-110 hover:scale-105 active:scale-95 transition-all"
+                   <Button
+                     size="lg"
+                     className="h-12 px-12 bg-zinc-900 text-white hover:bg-zinc-800 rounded-lg shadow-lg border-none font-bold scale-100 hover:scale-105 active:scale-95 transition-all"
                      onClick={handleGenerateAI}
                      disabled={generating}
                    >
@@ -753,16 +799,16 @@ export const SmartProposalBuilder = () => {
                 className="space-y-6"
               >
                  <div className="text-center mb-8">
-                   <h2 className="text-4xl font-black text-zinc-900 tracking-tighter italic">Final Review</h2>
-                   <p className="text-zinc-500 font-bold italic tracking-wide uppercase text-sm">Polish and finalize your masterpiece</p>
+                   <h2 className="text-2xl font-bold text-zinc-900 tracking-tight">Final Review</h2>
+                   <p className="text-zinc-500 text-sm">Polish and finalize your proposal</p>
                 </div>
 
-                <div className="space-y-12">
+                <div className="space-y-6">
                    {formData.sections?.map((section, idx) => (
-                     <div key={idx} className="group relative bg-white border border-zinc-100 rounded-[32px] p-10 shadow-xl shadow-zinc-100/50 hover:border-brand/20 transition-all">
-                        <div className="flex items-center justify-between mb-6">
-                           <h4 className="text-2xl font-black text-zinc-900 italic tracking-tighter decoration-brand decoration-2 underline-offset-8 underline">{section.title}</h4>
-                           <div className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">{String(idx + 1).padStart(2, '0')} Section</div>
+                     <div key={idx} className="group relative bg-white border border-zinc-200 rounded-2xl p-6 shadow-sm hover:border-brand/40 hover:shadow-md transition-all">
+                        <div className="flex items-center justify-between mb-4">
+                           <h4 className="text-lg font-bold text-zinc-900 tracking-tight">{section.title}</h4>
+                           <div className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">{String(idx + 1).padStart(2, '0')}</div>
                         </div>
                         <Textarea 
                           value={section.content}
@@ -777,14 +823,14 @@ export const SmartProposalBuilder = () => {
                    ))}
                 </div>
 
-                <div className="flex justify-center p-10">
-                   <Button 
+                <div className="flex justify-center pt-6">
+                   <Button
                     size="lg"
-                    className="h-20 px-16 bg-brand text-white border-none shadow-2xl shadow-brand/40 text-2xl font-black italic rounded-[30px] hover:scale-105 active:scale-95 transition-transform"
+                    className="h-12 px-12 bg-brand text-white border-none shadow-lg shadow-brand/20 font-bold rounded-lg hover:scale-105 active:scale-95 transition-transform"
                     onClick={handleSave}
                     disabled={saving}
                    >
-                     {saving ? 'FINISHING...' : 'SAVE & PREVIEW PROPOSAL'}
+                     {saving ? 'FINISHING...' : 'Save & Preview'}
                    </Button>
                 </div>
               </motion.div>
@@ -792,36 +838,36 @@ export const SmartProposalBuilder = () => {
           </AnimatePresence>
 
           {/* Persistent Footer Controls */}
-          <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-zinc-200 py-4 z-[99]">
+          <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-zinc-200 py-3 z-[99]">
              <div className="max-w-4xl mx-auto px-6 flex items-center justify-between">
-                <Button 
-                  variant="ghost" 
-                  className={cn("h-12 rounded-xl font-bold border border-zinc-200 px-6", currentStep === 0 && "opacity-0")} 
+                <Button
+                  variant="ghost"
+                  className={cn("h-10 rounded-lg font-bold border border-zinc-200 px-4 text-sm", currentStep === 0 && "opacity-0")}
                   onClick={handleBack}
                   disabled={currentStep === 0}
                 >
-                  <ChevronLeft className="w-5 h-5 mr-1" /> Back
+                  <ChevronLeft className="w-4 h-4 mr-1" /> Back
                 </Button>
 
-                <div className="text-zinc-400 text-xs font-black italic tracking-widest px-4">
+                <div className="text-zinc-400 text-xs font-black tracking-widest px-4">
                    STEP {currentStep + 1} / {STEPS.length}
                 </div>
 
                 {currentStep < STEPS.length - 1 ? (
-                  <Button 
-                    className="h-12 bg-zinc-900 text-white hover:bg-zinc-800 rounded-xl font-bold px-8" 
+                  <Button
+                    className="h-10 bg-zinc-900 text-white hover:bg-zinc-800 rounded-lg font-bold px-6 text-sm"
                     onClick={handleNext}
                     disabled={currentStep === 3 && !formData.sections?.length}
                   >
-                    Next Step <ChevronRight className="w-5 h-5 ml-1" />
+                    Next <ChevronRight className="w-4 h-4 ml-1" />
                   </Button>
                 ) : (
-                  <Button 
-                    className="h-12 bg-brand text-white hover:bg-brand/90 rounded-xl font-bold px-8 shadow-lg shadow-brand/20 border-none" 
+                  <Button
+                    className="h-10 bg-brand text-white hover:bg-brand/90 rounded-lg font-bold px-6 shadow-lg shadow-brand/20 border-none text-sm"
                     onClick={handleSave}
                     disabled={saving}
                   >
-                    {saving ? 'Completing...' : 'Finish & Exit'}
+                    {saving ? 'Completing...' : 'Finish'}
                   </Button>
                 )}
              </div>

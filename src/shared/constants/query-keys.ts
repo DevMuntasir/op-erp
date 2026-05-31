@@ -14,4 +14,7 @@ export const queryKeys = {
   screenshots: (filters?: unknown) => ['screenshots', filters ?? {}] as const,
   invoices: (filters?: unknown) => ['invoices', filters ?? {}] as const,
   notifications: ['notifications'] as const,
+  proposals: (filters?: unknown) => ['proposals', filters ?? {}] as const,
+  proposal: (id: string) => ['proposal', id] as const,
+  proposalSummary: ['proposal-summary'] as const,
 } as const;
