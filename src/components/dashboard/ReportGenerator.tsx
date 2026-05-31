@@ -1339,7 +1339,7 @@ export const ReportGenerator: React.FC = () => {
                     state={generating || delivering ? 'loading' : 'idle'}
                     idleText={editingReportId ? 'Update & Save Changes' : 'Generate Professional Report'}
                     loadingText={generating ? (editingReportId ? 'Updating Report...' : 'Analyzing Evidence...') : 'Delivering to Client...'}
-                    className="h-14 rounded-2xl shadow-xl shadow-zinc-200"
+                    
                   />
                   {editingReportId && (
                     <Button 
@@ -1352,7 +1352,7 @@ export const ReportGenerator: React.FC = () => {
                         setClientName('');
                         setProjectName('');
                       }}
-                      className="w-full font-black text-[10px] uppercase tracking-widest text-zinc-400 hover:text-zinc-600"
+                    
                     >
                       Cancel Editing
                     </Button>

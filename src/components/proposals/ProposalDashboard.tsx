@@ -62,13 +62,13 @@ export const ProposalDashboard = () => {
           <p className="text-zinc-500 text-sm">Create and manage your marketing strategy proposals</p>
         </div>
         <div className="flex items-center gap-3">
-           <Button variant="outline" className="rounded-lg border-zinc-200 h-10 px-4" onClick={() => navigate(`${basePath}/clients`)}>
+           <Button variant="outline"  onClick={() => navigate(`${basePath}/clients`)}>
               <Users className="w-4 h-4 mr-2" />
               Manage Clients
            </Button>
            <Button
             onClick={() => navigate(`${basePath}/proposals/smart-builder`)}
-            className="bg-zinc-900 text-white hover:bg-zinc-800 h-10 px-6 rounded-lg shadow-lg border-none"
+            
            >
             <Plus className="w-4 h-4 mr-2" />
             New Proposal
@@ -96,7 +96,7 @@ export const ProposalDashboard = () => {
         <div className="lg:col-span-2 space-y-4">
            <div className="flex items-center justify-between">
               <h3 className="text-lg font-bold text-zinc-900 tracking-tight">Recent Proposals</h3>
-              <Button variant="link" className="text-brand font-bold text-xs h-auto p-0" onClick={() => navigate(`${basePath}/proposals/all`)}>
+              <Button variant="link"  onClick={() => navigate(`${basePath}/proposals/all`)}>
                 View All <ChevronRight className="w-3 h-3 ml-1" />
               </Button>
            </div>

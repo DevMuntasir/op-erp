@@ -199,19 +199,18 @@ export const SmartProposalBuilder = () => {
   };
 
   const togglePricingPlan = (pkg: typeof PRICING_PACKAGES[0]) => {
-    const current = formData.pricingPlans || [];
-    const exists = current.find(p => p.id === pkg.id);
-    
+    const exists = formData.pricingPlans?.find(p => p.id === pkg.id);
+
     if (exists) {
-      updateFormData({ pricingPlans: current.filter(p => p.id !== pkg.id) });
+      updateFormData({ pricingPlans: [] });
     } else {
-      updateFormData({ 
-        pricingPlans: [...current, { 
-          id: pkg.id, 
-          label: pkg.label, 
-          value: pkg.price, 
-          items: [...pkg.features] 
-        }] 
+      updateFormData({
+        pricingPlans: [{
+          id: pkg.id,
+          label: pkg.label,
+          value: pkg.price,
+          items: [...pkg.features]
+        }]
       });
     }
   };
@@ -362,7 +361,7 @@ export const SmartProposalBuilder = () => {
            <Button variant="outline" className="rounded-full px-6 border-zinc-200" onClick={handleSave} disabled={saving}>
              {saving ? 'Saving...' : 'Save Draft'}
            </Button>
-           <Button className="bg-brand text-white hover:bg-brand/90 rounded-full px-6 shadow-lg shadow-brand/20 border-none" onClick={() => navigate(`${basePath}/proposals/preview/${id}`)} disabled={!id}>
+           <Button  onClick={() => navigate(`${basePath}/proposals/preview/${id}`)} disabled={!id}>
              <Eye className="w-4 h-4 mr-2" />
              Live Preview
            </Button>
@@ -370,30 +369,70 @@ export const SmartProposalBuilder = () => {
       </ProposalToolbar>
 
       {/* Stepper */}
-      <div className="max-w-4xl mx-auto mt-8 px-4">
-        <div className="flex items-center justify-between mb-12">
+      <div className="max-w-5xl mx-auto mt-10 px-4 mb-12">
+        <div className="flex items-center justify-between relative">
+          {/* Background line */}
+          <div className="absolute top-6 left-0 right-0 h-1 bg-gradient-to-r from-zinc-100 via-zinc-100 to-zinc-100 -z-10" />
+
           {STEPS.map((step, idx) => (
-            <div key={step.id} className="flex flex-col items-center gap-2 relative z-10 flex-1">
-               <div className={cn(
-                 "w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300 shrink-0",
-                 currentStep === idx ? "bg-brand text-white shadow-lg shadow-brand/20 scale-110" :
-                 currentStep > idx ? "bg-zinc-900 text-white" : "bg-white border border-zinc-200 text-zinc-400"
-               )}>
-                 <step.icon className="w-5 h-5" />
-               </div>
-               <span className={cn(
-                 "text-[10px] font-black uppercase tracking-tighter text-center",
-                 currentStep === idx ? "text-brand" : "text-zinc-400"
-               )}>{step.title}</span>
-               {idx < STEPS.length - 1 && (
-                 <div className={cn(
-                   "absolute top-5 left-[calc(50%+20px)] right-0 h-[2px] -z-10",
-                   currentStep > idx ? "bg-zinc-900" : "bg-zinc-100"
-                 )} />
-               )}
+            <div key={step.id} className="flex flex-col items-center gap-3 relative z-10 flex-1 group">
+              <motion.div
+                initial={false}
+                animate={{
+                  scale: currentStep === idx ? 1.1 : 1,
+                }}
+                transition={{ duration: 0.3 }}
+                className={cn(
+                  "w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-300 shrink-0 shadow-sm",
+                  currentStep === idx
+                    ? "bg-gradient-to-br from-brand to-pink-600 text-white shadow-lg shadow-brand/30 ring-4 ring-brand/20"
+                    : currentStep > idx
+                      ? "bg-zinc-900 text-white shadow-md"
+                      : "bg-white border-2 border-zinc-200 text-zinc-400 group-hover:border-brand/40 group-hover:shadow-md"
+                )}
+              >
+                {currentStep > idx ? (
+                  <CheckCircle2 className="w-6 h-6" />
+                ) : (
+                  <step.icon className="w-6 h-6" />
+                )}
+              </motion.div>
+
+              <div className="text-center min-w-max">
+                <span className={cn(
+                  "text-xs font-black uppercase tracking-wider leading-tight block transition-colors duration-300",
+                  currentStep === idx
+                    ? "text-brand"
+                    : currentStep > idx
+                      ? "text-zinc-700"
+                      : "text-zinc-500 group-hover:text-brand/60"
+                )}>
+                  {step.title}
+                </span>
+              </div>
+
+              {/* Progress line between steps */}
+              {idx < STEPS.length - 1 && (
+                <motion.div
+                  className={cn(
+                    "absolute top-6 left-[calc(50%+24px)] w-[calc(100%+8px)] h-1 rounded-full -z-10",
+                    currentStep > idx
+                      ? "bg-gradient-to-r from-zinc-900 to-zinc-700"
+                      : "bg-zinc-200"
+                  )}
+                  initial={false}
+                  animate={{
+                    background: currentStep > idx
+                      ? "linear-gradient(to right, #18181b, #a1a1aa)"
+                      : "rgb(229, 229, 229)"
+                  }}
+                  transition={{ duration: 0.3 }}
+                />
+              )}
             </div>
           ))}
         </div>
+      </div>
 
         {/* Form Body */}
         <div className="max-w-3xl mx-auto pb-20">
@@ -539,96 +578,138 @@ export const SmartProposalBuilder = () => {
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -20 }}
-                className="space-y-6"
+                className="space-y-8"
               >
-                 <div className="text-center mb-8">
+                 <div className="text-center mb-10">
                    <h2 className="text-2xl font-bold text-zinc-900 tracking-tight">Growth Strategy</h2>
-                   <p className="text-zinc-500 text-sm">Building the machine for results</p>
+                   <p className="text-zinc-500 text-sm mt-2">Select the services you'll provide</p>
                 </div>
 
-                <div className="space-y-8">
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                    {SERVICE_OPTIONS.map(s => (
-                      <button
-                        key={s.id}
-                        onClick={() => toggleService(s.label)}
-                        className={cn(
-                          "p-6 rounded-2xl border-2 transition-all flex flex-col items-center gap-3 text-center group relative overflow-hidden",
-                          formData.services?.includes(s.label)
-                            ? "border-brand bg-brand/5 shadow-md"
-                            : "border-zinc-100 bg-white hover:border-brand/40"
-                        )}
-                      >
-                         <div className={cn(
-                           "w-12 h-12 rounded-2xl flex items-center justify-center mb-1",
-                           formData.services?.includes(s.label) ? "bg-brand text-white" : "bg-zinc-50 text-zinc-400 group-hover:bg-brand/10 group-hover:text-brand"
-                         )}>
-                           <s.icon className="w-6 h-6" />
-                         </div>
-                         <span className={cn(
-                           "text-[10px] font-black uppercase tracking-widest leading-tight",
-                           formData.services?.includes(s.label) ? "text-brand" : "text-zinc-500"
-                         )}>{s.label}</span>
-                         {formData.services?.includes(s.label) && (
-                           <div className="absolute top-2 right-2">
-                             <CheckCircle2 className="w-5 h-5 text-brand" />
-                           </div>
-                         )}
-                      </button>
-                    ))}
-                  </div>
-
-                  <Card className="border-zinc-200 shadow-sm rounded-2xl overflow-hidden">
-                    <CardContent className="p-8 space-y-6">
-                        <div className="space-y-4">
-                           <Label className="text-xs font-black uppercase tracking-widest text-zinc-400">Growth Goals</Label>
-                           <div className="flex flex-wrap gap-2">
-                             {GROWTH_GOALS.map(goal => {
-                               const isSelected = (formData.goals as string[])?.includes(goal);
-                               return (
-                                 <button
-                                   key={goal}
-                                   onClick={() => toggleGoal(goal)}
-                                   className={cn(
-                                     "px-5 py-2.5 rounded-2xl border-2 font-bold text-sm transition-all flex items-center gap-2",
-                                     isSelected 
-                                       ? "border-brand bg-brand text-white shadow-lg shadow-brand/20" 
-                                       : "border-zinc-100 bg-zinc-50 text-zinc-500 hover:border-brand/40"
-                                   )}
-                                 >
-                                   {isSelected && <CheckCircle2 className="w-4 h-4" />}
-                                   {goal}
-                                 </button>
-                               );
-                             })}
-                           </div>
-                        </div>
-                       
-                       <div className="space-y-2">
-                          <Label className="text-xs font-black uppercase tracking-widest text-zinc-400">Target Audience Profiles</Label>
-                          <Textarea 
-                            value={formData.targetAudience} 
-                            onChange={e => updateFormData({ targetAudience: e.target.value })} 
-                            placeholder="Who are we hunting? Age, location, interests, behaviors..."
-                            className="min-h-[100px] border-zinc-200 focus:ring-brand rounded-xl font-bold"
-                          />
-                       </div>
-
-                       <div className="space-y-2">
-                          <Label className="text-xs font-black uppercase tracking-widest text-zinc-400">Estimated Monthly Ad Spend/Budget</Label>
-                          <div className="relative">
-                            <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
-                            <Input 
-                              type="number"
-                              value={formData.monthlyBudget} 
-                              onChange={e => updateFormData({ monthlyBudget: Number(e.target.value) })} 
-                              className="pl-10 h-12 border-zinc-200 focus:ring-brand rounded-xl font-bold"
-                            />
+                {/* Service Options Grid */}
+                <div>
+                  <Label className="text-xs font-black uppercase tracking-widest text-zinc-600 block mb-6">Core Services</Label>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-5">
+                    {SERVICE_OPTIONS.map((s, idx) => {
+                      const isSelected = formData.services?.includes(s.label);
+                      return (
+                        <motion.button
+                          key={s.id}
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: idx * 0.05 }}
+                          onClick={() => toggleService(s.label)}
+                          className={cn(
+                            "relative p-6 rounded-2xl border-2 transition-all flex flex-col items-center gap-3 text-center group overflow-hidden",
+                            "before:absolute before:inset-0 before:bg-gradient-to-br before:from-transparent before:to-transparent before:opacity-0 before:transition-opacity before:duration-300",
+                            isSelected
+                              ? "border-brand bg-gradient-to-br from-brand/8 to-brand/3 shadow-lg shadow-brand/20 before:from-brand/15 before:to-brand/5 before:opacity-100"
+                              : "border-zinc-200 bg-white shadow-sm hover:shadow-md hover:border-brand/50 before:from-zinc-50 before:to-transparent"
+                          )}
+                        >
+                          <div className={cn(
+                            "w-14 h-14 rounded-2xl flex items-center justify-center transition-all duration-300 relative z-10",
+                            isSelected
+                              ? "bg-gradient-to-br from-brand to-pink-600 text-white shadow-lg shadow-brand/30"
+                              : "bg-zinc-100 text-zinc-500 group-hover:bg-brand/10 group-hover:text-brand group-hover:shadow-md"
+                          )}>
+                            <s.icon className="w-7 h-7" />
                           </div>
-                       </div>
-                    </CardContent>
-                  </Card>
+                          <span className={cn(
+                            "text-[11px] font-black uppercase tracking-wider leading-tight relative z-10 transition-colors",
+                            isSelected ? "text-brand" : "text-zinc-600 group-hover:text-brand"
+                          )}>
+                            {s.label}
+                          </span>
+                          {isSelected && (
+                            <motion.div
+                              initial={{ scale: 0 }}
+                              animate={{ scale: 1 }}
+                              className="absolute top-3 right-3 z-20 bg-brand text-white rounded-full p-1 shadow-lg shadow-brand/30"
+                            >
+                              <CheckCircle2 className="w-4 h-4" />
+                            </motion.div>
+                          )}
+                        </motion.button>
+                      );
+                    })}
+                  </div>
                 </div>
+
+                {/* Growth Goals and Other Info Card */}
+                <Card className="border-zinc-200 shadow-sm rounded-2xl overflow-hidden bg-gradient-to-br from-zinc-50/50 to-white">
+                  <CardContent className="p-8 space-y-8">
+                    {/* Growth Goals */}
+                    <div className="space-y-5">
+                      <div>
+                        <Label className="text-xs font-black uppercase tracking-widest text-zinc-600 block mb-4">Growth Goals</Label>
+                        <p className="text-xs text-zinc-500 mb-4">Select multiple goals to focus on</p>
+                      </div>
+                      <div className="flex flex-wrap gap-3">
+                        {GROWTH_GOALS.map((goal, idx) => {
+                          const isSelected = (formData.goals as string[])?.includes(goal);
+                          return (
+                            <motion.button
+                              key={goal}
+                              initial={{ opacity: 0, scale: 0.95 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              transition={{ delay: idx * 0.05 }}
+                              onClick={() => toggleGoal(goal)}
+                              className={cn(
+                                "px-6 py-3 rounded-full border-2 font-bold text-sm transition-all flex items-center gap-2 whitespace-nowrap",
+                                "before:absolute before:inset-0 before:bg-gradient-to-r before:from-transparent before:to-transparent before:opacity-0 before:transition-opacity before:rounded-full",
+                                isSelected
+                                  ? "border-brand bg-gradient-to-r from-brand to-pink-600 text-white shadow-lg shadow-brand/25 before:from-white/20 before:to-transparent before:opacity-30"
+                                  : "border-zinc-300 bg-white text-zinc-700 hover:border-brand/60 hover:shadow-md hover:bg-zinc-50"
+                              )}
+                            >
+                              {isSelected && (
+                                <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}>
+                                  <CheckCircle2 className="w-4 h-4" />
+                                </motion.div>
+                              )}
+                              <span>{goal}</span>
+                            </motion.button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="h-px bg-gradient-to-r from-transparent via-zinc-200 to-transparent" />
+
+                    {/* Target Audience */}
+                    <div className="space-y-3">
+                      <div>
+                        <Label className="text-xs font-black uppercase tracking-widest text-zinc-600 block mb-2">Target Audience Profiles</Label>
+                        <p className="text-xs text-zinc-500 mb-3">Describe your ideal customer</p>
+                      </div>
+                      <Textarea
+                        value={formData.targetAudience || ''}
+                        onChange={e => updateFormData({ targetAudience: e.target.value })}
+                        placeholder="Age, location, interests, pain points, behaviors..."
+                        className="min-h-[110px] border-zinc-200 focus:ring-brand rounded-2xl font-medium text-zinc-700 bg-white/50"
+                      />
+                    </div>
+
+                    <div className="h-px bg-gradient-to-r from-transparent via-zinc-200 to-transparent" />
+
+                    {/* Budget */}
+                    <div className="space-y-3">
+                      <div>
+                        <Label className="text-xs font-black uppercase tracking-widest text-zinc-600 block mb-2">Monthly Ad Spend Budget</Label>
+                        <p className="text-xs text-zinc-500 mb-3">Estimated budget for advertising</p>
+                      </div>
+                      <div className="relative">
+                        <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-400" />
+                        <Input
+                          type="number"
+                          value={formData.monthlyBudget ?? 2500}
+                          onChange={e => updateFormData({ monthlyBudget: Number(e.target.value) })}
+                          className="pl-12 h-12 border-zinc-200 focus:ring-brand rounded-2xl font-bold text-lg text-zinc-900 bg-white"
+                        />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
               </motion.div>
             )}
 
@@ -642,99 +723,157 @@ export const SmartProposalBuilder = () => {
               >
                  <div className="text-center mb-8">
                    <h2 className="text-2xl font-bold text-zinc-900 tracking-tight">Investment Models</h2>
-                   <p className="text-zinc-500 text-sm">Packages designed to convert</p>
+                   <p className="text-zinc-500 text-sm">Select one package to include in your proposal</p>
                 </div>
 
-                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  {availablePackages.map(p => {
+                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 ">
+                  {availablePackages.map((p, idx) => {
                     const isSelected = !!formData.pricingPlans?.find(plan => plan.id === p.id);
+                    const isPopular = p.id === 'standard';
+
                     return (
-                      <Card
+                      <motion.div
                         key={p.id}
-                        className={cn(
-                          "relative border-2 transition-all rounded-2xl overflow-hidden group bg-white",
-                          isSelected ? "border-brand shadow-lg scale-105 z-10" : "border-zinc-100 hover:border-brand/20 shadow-sm"
-                        )}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: idx * 0.1 }}
+                        onClick={() => togglePricingPlan(p)}
+                        className="h-full cursor-pointer"
                       >
-                         <div className="p-5 pb-3">
-                            <div className="flex items-center justify-between mb-3">
-                              <Input 
+                        <Card
+                          className={cn(
+                            "relative border-[1px] w-full transition-all duration-300 rounded-xl overflow-hidden group h-full flex flex-col",
+                            "before:absolute before:inset-0 before:bg-gradient-to-br before:from-transparent before:to-transparent before:opacity-0 before:transition-opacity before:duration-300",
+                            isSelected
+                              ? "border-brand bg-gradient-to-br from-brand/5 to-brand/2 shadow-2xl shadow-brand/20 before:from-brand/10 before:to-brand/5 before:opacity-100"
+                              : "border-zinc-200 bg-white shadow-sm hover:shadow-md hover:border-brand/40 before:from-zinc-50 before:to-transparent before:opacity-0"
+                          )}
+                        >
+                          {isPopular && !isSelected && (
+                            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20">
+                              <Badge className="bg-brand/10 text-brand border-brand/30 font-bold text-[11px] uppercase tracking-wider px-3 py-1">
+                                Most Popular
+                              </Badge>
+                            </div>
+                          )}
+
+                          <div className="relative z-10 flex-1 flex flex-col p-8">
+                            <div className="flex items-center justify-between mb-6">
+                              <Input
+                                onClick={e => e.stopPropagation()}
                                 value={p.label}
                                 onChange={e => updatePackageDraft(p.id, { label: e.target.value })}
-                                className="text-xs font-black uppercase tracking-[0.2em] text-zinc-400 border-none p-0 h-auto focus-visible:ring-0 bg-transparent w-2/3"
+                                className="text-sm font-black uppercase tracking-[0.15em] text-zinc-600 border-none p-0 h-auto focus-visible:ring-0 bg-transparent w-3/4"
                               />
-                               <button 
-                                onClick={() => togglePricingPlan(p)}
+                              <div
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  togglePricingPlan(p);
+                                }}
                                 className={cn(
-                                  "w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all",
-                                  isSelected ? "bg-brand border-brand text-white" : "border-zinc-200 text-transparent"
+                                  "w-6  h-6 rounded-full border-2 hidden items-center justify-center transition-all flex-shrink-0",
+                                  isSelected
+                                    ? "bg-brand border-brand text-white shadow-lg shadow-brand/30"
+                                    : "border-zinc-300 text-transparent hover:border-brand"
                                 )}
                               >
                                 <CheckCircle2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                            <div className="flex items-center gap-1 overflow-hidden">
-                               <span className="text-lg font-black text-zinc-400">$</span>
-                               <Input 
-                                type="number"
-                                value={p.price}
-                                onChange={e => updatePackageDraft(p.id, { price: Number(e.target.value) })}
-                                className="text-2xl font-black text-zinc-900 tracking-tighter border-none p-0 h-auto focus-visible:ring-0 bg-transparent w-full"
-                               />
-                               <span className="text-sm font-bold text-zinc-400 shrink-0">/mo</span>
-                            </div>
-                         </div>
-                         
-                         <div className="px-5 pb-5 pt-3 space-y-2">
-                            <div className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-2">Deliverables</div>
-                            {p.features.map((f, fi) => (
-                              <div key={fi} className="flex items-center gap-3 group/item">
-                                 <CheckCircle2 className={cn("w-4 h-4 shrink-0", isSelected ? "text-brand" : "text-zinc-300")} />
-                                 <Input 
-                                  value={f}
-                                  onChange={e => updateFeature(p.id, fi, e.target.value)}
-                                  className="text-xs font-bold text-zinc-600 border-none p-0 h-auto focus-visible:ring-0 bg-transparent"
-                                 />
-                                 <button 
-                                  onClick={() => removeFeature(p.id, fi)}
-                                  className="opacity-0 group-hover/item:opacity-100 p-1 hover:text-red-500 transition-all"
-                                 >
-                                  <Trash2 className="w-3 h-3" />
-                                 </button>
                               </div>
-                            ))}
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              className="w-full mt-2 border border-dashed border-zinc-200 text-zinc-400 hover:text-brand hover:border-brand rounded-xl h-8 text-[10px] font-black uppercase"
-                              onClick={() => addFeature(p.id)}
-                            >
-                              <Plus className="w-3 h-3 mr-1" /> Add Deliverable
-                            </Button>
-                         </div>
+                            </div>
 
-                         {isSelected && (
-                           <div className="absolute bottom-4 left-1/2 -translate-x-1/2 animate-in fade-in slide-in-from-bottom-2">
-                              <div className="bg-brand text-white text-[8px] font-black uppercase tracking-[0.3em] px-4 py-1.5 rounded-full shadow-lg shadow-brand/20 flex items-center gap-1.5">
-                                <BadgeCheck className="w-3 h-3" /> Included
+                            <div className="mb-8">
+                              <div className="flex items-baseline gap-1">
+                                <span className="text-3xl font-black text-zinc-900">$</span>
+                                <Input
+                                  onClick={e => e.stopPropagation()}
+                                  type="number"
+                                  value={p.price}
+                                  onChange={e => updatePackageDraft(p.id, { price: Number(e.target.value) })}
+                                  className="text-4xl font-black text-zinc-900 tracking-tighter border-none p-0 h-auto focus-visible:ring-0 bg-transparent w-24"
+                                />
+                                <span className="text-sm font-bold text-zinc-500">/mo</span>
                               </div>
-                           </div>
-                         )}
-                      </Card>
+                              <p className="text-xs text-zinc-500 font-bold mt-2 uppercase tracking-wider">per month</p>
+                            </div>
+
+                            <div className="space-y-3 flex-1">
+                              <div className="text-[11px] font-black text-zinc-500 uppercase tracking-widest">What's Included</div>
+                              <div className="space-y-2.5">
+                                {p.features.map((f, fi) => (
+                                  <div
+                                    key={fi}
+                                    onClick={e => e.stopPropagation()}
+                                    className="flex items-start gap-3 group/item"
+                                  >
+                                    <div className={cn(
+                                      "w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors",
+                                      isSelected ? "bg-brand/10" : "bg-zinc-100"
+                                    )}>
+                                      <CheckCircle2 className={cn(
+                                        "w-4 h-4",
+                                        isSelected ? "text-brand" : "text-zinc-300"
+                                      )} />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <Input
+                                        value={f}
+                                        onChange={e => updateFeature(p.id, fi, e.target.value)}
+                                        className="text-sm font-bold text-zinc-700 border-none p-0 h-auto focus-visible:ring-0 bg-transparent"
+                                      />
+                                    </div>
+                                    <button
+                                      onClick={e => {
+                                        e.stopPropagation();
+                                        removeFeature(p.id, fi);
+                                      }}
+                                      className="opacity-0 group-hover/item:opacity-100 p-1 hover:text-red-500 transition-all flex-shrink-0"
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+
+                            <Button
+                              onClick={e => {
+                                e.stopPropagation();
+                                addFeature(p.id);
+                              }}
+                              variant="ghost"
+                              size="sm"
+                              className="w-full mt-6 border border-dashed border-zinc-200 text-zinc-500 hover:text-brand hover:border-brand hover:bg-zinc-50 rounded-xl h-9 text-[11px] font-bold uppercase transition-colors"
+                            >
+                              <Plus className="w-3.5 h-3.5 mr-1.5" /> Add Item
+                            </Button>
+                          </div>
+
+                          {isSelected && (
+                            <motion.div
+                              initial={{ scale: 0 }}
+                              animate={{ scale: 1 }}
+                              className="absolute top-4 right-4 z-20 bg-brand text-white rounded-full p-2 shadow-lg shadow-brand/30"
+                            >
+                              <BadgeCheck className="w-5 h-5" />
+                            </motion.div>
+                          )}
+                        </Card>
+                      </motion.div>
                     );
                   })}
                 </div>
 
-                <div className="flex justify-center mt-12 mb-6">
-                    <Button 
+                <div className="flex justify-center">
+                    <Button
                       onClick={() => {
                         const newId = `custom-${Date.now()}`;
-                        const newPkg = { id: newId, label: 'Custom Service', price: 2000, features: ['Core Deliverable 1'] };
+                        const newPkg = { id: newId, label: 'Custom', price: 2000, features: ['Core Deliverable 1'] };
                         setAvailablePackages([...availablePackages, newPkg]);
                       }}
-                      className="bg-zinc-900 hover:bg-zinc-800 text-white rounded-2xl px-8 h-12 font-black italic tracking-tight shadow-xl"
+                      variant="outline"
+                      className="border-zinc-300 rounded-2xl px-8 h-11 font-bold tracking-tight hover:bg-zinc-50"
                     >
-                      <Plus className="w-5 h-5 mr-2" /> Add Bespoke Model
+                      <Plus className="w-4 h-4 mr-2" /> Create Custom Package
                     </Button>
                 </div>
               </motion.div>
@@ -748,10 +887,7 @@ export const SmartProposalBuilder = () => {
                 exit={{ opacity: 0, x: -20 }}
                 className="space-y-6"
               >
-                 <div className="text-center mb-8">
-                   <h2 className="text-2xl font-bold text-zinc-900 tracking-tight">AI Magic</h2>
-                   <p className="text-zinc-500 text-sm">Generate high-impact agency content</p>
-                </div>
+        
 
                 <div className="flex flex-col items-center justify-center py-20 gap-8">
                    <div className="relative">
@@ -770,7 +906,7 @@ export const SmartProposalBuilder = () => {
 
                    <Button
                      size="lg"
-                     className="h-12 px-12 bg-zinc-900 text-white hover:bg-zinc-800 rounded-lg shadow-lg border-none font-bold scale-100 hover:scale-105 active:scale-95 transition-all"
+                     
                      onClick={handleGenerateAI}
                      disabled={generating}
                    >
@@ -781,7 +917,7 @@ export const SmartProposalBuilder = () => {
                        </>
                      ) : (
                        <>
-                         <Sparkles className="w-5 h-5 mr-3" />
+                        
                          GENERATE AI PROPOSAL
                        </>
                      )}
@@ -855,7 +991,7 @@ export const SmartProposalBuilder = () => {
 
                 {currentStep < STEPS.length - 1 ? (
                   <Button
-                    className="h-10 bg-zinc-900 text-white hover:bg-zinc-800 rounded-lg font-bold px-6 text-sm"
+                   
                     onClick={handleNext}
                     disabled={currentStep === 3 && !formData.sections?.length}
                   >
@@ -863,7 +999,7 @@ export const SmartProposalBuilder = () => {
                   </Button>
                 ) : (
                   <Button
-                    className="h-10 bg-brand text-white hover:bg-brand/90 rounded-lg font-bold px-6 shadow-lg shadow-brand/20 border-none text-sm"
+                   
                     onClick={handleSave}
                     disabled={saving}
                   >
@@ -873,7 +1009,6 @@ export const SmartProposalBuilder = () => {
              </div>
           </div>
         </div>
-      </div>
     </div>
   );
 };
