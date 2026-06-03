@@ -78,7 +78,6 @@ const navItems = {
   ],
   employee: [
     { icon: LayoutDashboard, label: 'My Dashboard', path: '/employee' },
-    { icon: Sparkles, label: 'Client Reports', path: '/employee/reports' },
     { icon: Briefcase, label: 'My Clients', path: '/employee/clients' },
     { icon: History, label: 'My History', path: '/employee/history' },
     { icon: CheckSquare, label: 'My Tasks', path: '/employee/tasks' },

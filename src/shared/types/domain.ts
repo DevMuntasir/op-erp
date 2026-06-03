@@ -185,18 +185,39 @@ export interface Invite {
   acceptedAt?: Dateish;
 }
 
+export interface Contact {
+  uid: string;
+  name: string;
+  email: string | null;
+  role: UserRole;
+  photoURL?: string | null;
+  phone?: string | null;
+  status?: 'online' | 'offline';
+  lastSeen?: Dateish;
+}
+
+export interface ContactsResponse {
+  contacts: Contact[];
+  groups: Record<string, Contact[]>;
+}
+
+export interface Conversation {
+  id: string;
+  participant: Contact;
+  lastMessage?: Message | null;
+  unreadCount: number;
+  lastMessageAt?: string;
+}
+
 export interface Message {
   id: string;
-  chatId: string;
-  adminId: string;
+  conversationId: string;
   senderId: string;
-  text: string;
-  status: string;
-  seenAt?: Dateish;
-  createdAt?: Dateish;
-  timestamp?: Dateish;
-  participants?: string[];
+  content: string;
   fileUrl?: string | null;
+  deletedAt?: string | null;
+  createdAt: string;
+  readBy?: string[];
 }
 
 export interface ProposalSection {
@@ -249,18 +270,53 @@ export interface Report {
   id: string;
   adminId: string;
   createdBy: string;
+  projectId?: string | null;
   clientName: string;
   clientEmail?: string | null;
   projectName?: string | null;
-  notes?: string | null;
-  content?: string | null;
-  images?: string[];
+  reportingPeriod?: string | null;
+  employeeNotes?: string | null;
+  screenshotUrls?: string[];
+  contentMd?: string | null;
   status: string;
+  sentToClients?: unknown;
   sentToClient?: boolean;
-  sentAt?: Dateish;
   isViewed?: boolean;
   viewedAt?: Dateish;
   createdAt?: Dateish;
+  updatedAt?: Dateish;
+}
+
+export interface ReportScreenshotInput {
+  base64: string;
+  mimeType: string;
+  label?: string;
+}
+
+export interface GenerateReportPayload {
+  projectId?: string;
+  title: string;
+  reportingPeriod?: string;
+  employeeNotes?: string;
+  screenshots: ReportScreenshotInput[];
+}
+
+export interface ReportUpdatePayload {
+  title?: string;
+  clientName?: string;
+  clientEmail?: string;
+  projectName?: string;
+  reportingPeriod?: string;
+  employeeNotes?: string;
+  contentMd?: string;
+  status?: string;
+}
+
+export interface ReportClient {
+  clientId: string;
+  clientName: string;
+  clientEmail: string;
+  clientCompany?: string | null;
 }
 
 export interface Lead {

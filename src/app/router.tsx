@@ -9,7 +9,7 @@ import { ProfilePage } from '@/src/components/profile';
 // Lazy load dashboard components
 const DashboardOverview = lazy(() => import('@/src/components/dashboard/DashboardOverview').then(m => ({ default: m.DashboardOverview })));
 const AdminScreenshots = lazy(() => import('@/src/components/dashboard/AdminScreenshots').then(m => ({ default: m.AdminScreenshots })));
-const ReportGenerator = lazy(() => import('@/src/components/dashboard/ReportGenerator').then(m => ({ default: m.ReportGenerator })));
+const ReportsManagement = lazy(() => import('@/src/components/reports/ReportsManagement').then(m => ({ default: m.ReportsManagement })));
 
 // Lazy load employee components
 const EmployeeManagement = lazy(() => import('@/src/features/employees/EmployeeManagement').then(m => ({ default: m.EmployeeManagement })));
@@ -61,7 +61,7 @@ function AdminArea() {
           <Route path="projects" element={<ProjectManagement />} />
           <Route path="history" element={<SessionHistory />} />
           <Route path="monitoring" element={<AdminScreenshots />} />
-          <Route path="reports" element={<ReportGenerator />} />
+          <Route path="reports" element={<ReportsManagement />} />
           <Route path="billing" element={<BillingManagement />} />
           <Route path="leads" element={<LeadManagement />} />
           <Route path="finder" element={<LeadFinder />} />
@@ -90,7 +90,6 @@ function EmployeeArea() {
           <Route path="tasks/:taskId" element={<TaskDetail />} />
           <Route path="clients" element={<ClientManagement />} />
           <Route path="history" element={<SessionHistory />} />
-          <Route path="reports" element={<ReportGenerator />} />
           <Route path="leads" element={<LeadManagement />} />
           <Route path="finder" element={<LeadFinder />} />
           <Route path="proposals" element={<ProposalDashboard />} />
@@ -122,7 +121,7 @@ function SuperAdminArea() {
           <Route path="projects" element={<ProjectManagement />} />
           <Route path="history" element={<SessionHistory />} />
           <Route path="monitoring" element={<AdminScreenshots />} />
-          <Route path="reports" element={<ReportGenerator />} />
+          <Route path="reports" element={<ReportsManagement />} />
           <Route path="billing" element={<BillingManagement />} />
           <Route path="leads" element={<LeadManagement />} />
           <Route path="finder" element={<LeadFinder />} />
