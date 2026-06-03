@@ -225,9 +225,8 @@ export const ChatSystem = () => {
   }, [activeConversation, loadMessages]);
 
   useEffect(() => {
-    // Scroll to bottom when new messages arrive
+    // Scroll to bottom when new messages arriv
     if (scrollRef.current) {
-      // Use setTimeout to ensure DOM is fully rendered
       setTimeout(() => {
         const scrollArea = scrollRef.current?.parentElement;
         if (scrollArea) {
