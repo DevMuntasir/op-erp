@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, where, onSnapshot, orderBy, limit } from 'firebase/firestore';
-import { db } from '@/src/lib/firebase';
 import { useAuth } from '@/src/App';
-import { Session, Screenshot, User } from '@/src/types';
+import { Screenshot, User } from '@/src/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -25,73 +23,67 @@ export const AdminScreenshots = () => {
   const isSuperAdmin = user?.role === 'super_admin';
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !isSuperAdmin) return;
 
-    if (isSuperAdmin) {
-      const qAdmins = query(collection(db, 'profiles'), where('role', '==', 'admin'));
-      const unsubAdmins = onSnapshot(qAdmins, (snap) => {
-        setAdmins(snap.docs.map(doc => ({ uid: doc.id, ...doc.data() } as User)));
-      }, (error) => console.error("AdminScreenshots unsubAdmins error:", error));
-      return unsubAdmins;
-    }
+    const fetchAdmins = async () => {
+      try {
+        const response = await fetch('/v1/admin/admins/');
+        if (!response.ok) throw new Error('Failed to fetch admins');
+        const data = await response.json();
+        setAdmins(data);
+      } catch (error) {
+        console.error("AdminScreenshots fetchAdmins error:", error);
+      }
+    };
+
+    fetchAdmins();
   }, [user, isSuperAdmin]);
 
   useEffect(() => {
     if (!user) return;
 
-    const currentAdminId = isSuperAdmin 
-      ? (selectedAdminId === 'all' ? null : selectedAdminId) 
-      : (user.role === 'admin' ? user.uid : (user.adminId || user.uid));
+    const fetchData = async () => {
+      try {
+        setLoading(true);
 
-    // Fetch users for mapping - if super admin and 'all', fetch all profiles
-    let qUsers;
-    if (isSuperAdmin && selectedAdminId === 'all') {
-      qUsers = query(collection(db, 'profiles'));
-    } else {
-      qUsers = query(collection(db, 'profiles'), where('adminId', '==', currentAdminId || user.uid));
-    }
+        // Fetch employees
+        const usersResponse = await fetch('/v1/admin/employees/');
+        if (usersResponse.ok) {
+          const usersData = await usersResponse.json();
+          console.log('Employees fetched:', usersData);
+          setUsers(usersData);
+        } else {
+          console.error('Failed to fetch employees:', usersResponse.status);
+        }
 
-    const unsubUsers = onSnapshot(qUsers, (snap) => {
-      setUsers(snap.docs.map(doc => ({ uid: doc.id, ...doc.data() } as User)));
-    }, (error) => console.error("AdminScreenshots unsubUsers error:", error));
+        // Fetch screenshots
+        const screensResponse = await fetch('/v1/screenshots/');
+        if (screensResponse.ok) {
+          const screensData = await screensResponse.json();
+          console.log('Screenshots fetched:', screensData);
+          setScreenshots(screensData);
+        } else {
+          console.error('Failed to fetch screenshots:', screensResponse.status);
+        }
 
-    // Fetch screenshots
-    let qScreens;
-    if (isSuperAdmin && selectedAdminId === 'all') {
-      qScreens = query(
-        collection(db, 'screenshots'),
-        orderBy('timestamp', 'desc'),
-        limit(100)
-      );
-    } else {
-      qScreens = query(
-        collection(db, 'screenshots'),
-        where('adminId', '==', currentAdminId),
-        orderBy('timestamp', 'desc'),
-        limit(100)
-      );
-    }
-
-    const unsubScreens = onSnapshot(qScreens, (snap) => {
-      setScreenshots(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      setLoading(false);
-    }, (error) => {
-      console.error("AdminScreenshots unsubScreens error:", error);
-      setLoading(false);
-    });
-
-    return () => {
-      unsubUsers();
-      unsubScreens();
+        setLoading(false);
+      } catch (error) {
+        console.error("AdminScreenshots fetchData error:", error);
+        setLoading(false);
+      }
     };
+
+    fetchData();
   }, [user, selectedAdminId, isSuperAdmin]);
 
   const getUserName = (userId: string) => {
-    return users.find(u => u.uid === userId)?.name || 'Unknown Staff';
+    const foundUser = users.find(u => u.uid === userId);
+    return foundUser?.name || 'Unknown Staff';
   };
 
   const getUserAvatar = (userId: string) => {
-    return users.find(u => u.uid === userId)?.photoURL;
+    const foundUser = users.find(u => u.uid === userId);
+    return foundUser?.photoURL || '';
   };
 
   return (

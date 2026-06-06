@@ -382,7 +382,7 @@ export const LeadManagement = () => {
                         {lead.email}
                       </div>
                     )}
-                    {(lead.location || lead.address) && <FormattedAddress address={lead.location || lead.address} />}
+                    {lead.address}
                     {lead.website && (
                       <a href={lead.website} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-sm text-emerald-600 hover:text-emerald-700">
                         <Globe className="w-4 h-4" />

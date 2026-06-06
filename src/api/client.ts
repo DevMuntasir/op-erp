@@ -3,7 +3,7 @@ import { auth } from '@/src/lib/firebase';
 import { ApiClientError, ApiFailure, ApiResponse } from '@/src/shared/types/api';
 
 export const apiClient = axios.create({
-  baseURL: 'https://op-media-backend.vercel.app',
+  baseURL: 'https://op-media.up.railway.app',
   headers: {
     'Content-Type': 'application/json',
   },

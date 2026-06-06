@@ -244,7 +244,7 @@ export const LeadFinder = () => {
                         {(lead.location || lead.address) && (
                           <div className="flex items-center gap-2 text-zinc-600">
                             <MapPin className="w-4 h-4 shrink-0 text-zinc-400" />
-                            <span className="truncate">{lead.location || lead.address}</span>
+                            <span className="truncate">{lead.address}</span>
                           </div>
                         )}
                         {lead.website && (

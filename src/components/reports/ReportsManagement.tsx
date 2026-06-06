@@ -7,12 +7,14 @@ import {
   Loader2,
   Trash2,
   Edit2,
+  Share2,
   Copy,
   Check,
   FileDown,
   Image as ImageIcon,
   X,
   Upload,
+  Send,
   Search,
   Filter,
   Eye,
@@ -28,6 +30,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -39,6 +42,8 @@ import {
   generateReport,
   updateReport,
   deleteReport,
+  getReportClients,
+  sendReport,
 } from '@/src/api/endpoints/reports.api';
 import { listProjects } from '@/src/api/endpoints/projects.api';
 import { Report } from '@/src/shared/types/domain';
@@ -83,6 +88,7 @@ export const ReportsManagement: React.FC = () => {
   const [detailOpen, setDetailOpen] = useState(false);
   const [generateOpen, setGenerateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [sendOpen, setSendOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Report | null>(null);
   const [copied, setCopied] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -102,6 +108,9 @@ export const ReportsManagement: React.FC = () => {
   const [editPeriod, setEditPeriod] = useState('');
   const [editContent, setEditContent] = useState('');
   const [editStatus, setEditStatus] = useState('draft');
+
+  // Send form
+  const [selectedClientIds, setSelectedClientIds] = useState<string[]>([]);
 
   const reportsQuery = useQuery({
     queryKey: queryKeys.reports({ scope }),
@@ -217,6 +226,27 @@ export const ReportsManagement: React.FC = () => {
     },
   });
 
+  const sendMutation = useMutation({
+    mutationFn: (vars: { id: string; clientIds: string[] }) => sendReport(vars.id, vars.clientIds),
+    onSuccess: (report) => {
+      invalidateReports();
+      toast.success('Report sent to client(s)');
+      setSendOpen(false);
+      setSelectedClientIds([]);
+      setSelectedReport(report);
+    },
+    onError: (error: Error) => {
+      toast.error('Failed to send report', { description: error.message });
+    },
+  });
+
+  const reportClientsQuery = useQuery({
+    queryKey: queryKeys.reportClients(selectedReport?.id ?? 'none'),
+    queryFn: () => getReportClients(selectedReport!.id),
+    enabled: sendOpen && !!selectedReport,
+  });
+  const availableClients = reportClientsQuery.data ?? [];
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
@@ -280,6 +310,12 @@ export const ReportsManagement: React.FC = () => {
     setExporting(false);
   };
 
+  const toggleClient = (clientId: string) => {
+    setSelectedClientIds((prev) =>
+      prev.includes(clientId) ? prev.filter((id) => id !== clientId) : [...prev, clientId],
+    );
+  };
+
   const statCards = [
     { label: 'Total Reports', value: stats.total, icon: FileText, tone: 'text-zinc-900' },
     { label: 'Drafts', value: stats.drafts, icon: Clock, tone: 'text-amber-600' },
@@ -293,15 +329,17 @@ export const ReportsManagement: React.FC = () => {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-zinc-900">Reports</h1>
-          <p className="text-zinc-500 text-sm">Generate and deliver AI-powered client reports.</p>
+          <p className="text-zinc-500 text-sm">{scope === 'client' ? 'View your client reports.' : 'Generate and deliver AI-powered client reports.'}</p>
         </div>
-        <Button
-          onClick={() => setGenerateOpen(true)}
-          className="bg-zinc-900 text-white hover:bg-zinc-800 h-10 rounded-lg"
-        >
-          <Sparkles className="w-4 h-4 mr-2" />
-          Generate Report
-        </Button>
+        {scope !== 'client' && (
+          <Button
+            onClick={() => setGenerateOpen(true)}
+            className="bg-zinc-900 text-white hover:bg-zinc-800 h-10 rounded-lg"
+          >
+            <Sparkles className="w-4 h-4 mr-2" />
+            Generate Report
+          </Button>
+        )}
       </div>
 
       {/* KPI stats */}
@@ -361,9 +399,9 @@ export const ReportsManagement: React.FC = () => {
               {reports.length === 0 ? 'No reports yet' : 'No matching reports'}
             </h3>
             <p className="text-zinc-500 text-sm mb-4">
-              {reports.length === 0 ? 'Generate your first AI-powered report.' : 'Try adjusting your search or filter.'}
+              {reports.length === 0 ? (scope === 'client' ? 'Your reports will appear here.' : 'Generate your first AI-powered report.') : 'Try adjusting your search or filter.'}
             </p>
-            {reports.length === 0 && (
+            {reports.length === 0 && scope !== 'client' && (
               <Button className="bg-zinc-900 text-white hover:bg-zinc-800 h-9 rounded-lg" onClick={() => setGenerateOpen(true)}>
                 <Sparkles className="w-4 h-4 mr-2" />
                 Generate Report
@@ -380,30 +418,32 @@ export const ReportsManagement: React.FC = () => {
               <CardHeader className="pb-3 bg-zinc-50/30 border-b border-zinc-100">
                 <div className="flex justify-between items-start gap-2">
                   <StatusBadge status={r.status} />
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-zinc-500 hover:text-blue-600"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openEdit(r);
-                      }}
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-zinc-500 hover:text-red-600"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setDeleteTarget(r);
-                      }}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
+                  {scope !== 'client' && (
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-zinc-500 hover:text-blue-600"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openEdit(r);
+                        }}
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-zinc-500 hover:text-red-600"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeleteTarget(r);
+                        }}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  )}
                 </div>
                 <CardTitle className="mt-2 text-base font-bold line-clamp-1 tracking-tight">{r.clientName || 'Untitled report'}</CardTitle>
               </CardHeader>
@@ -463,6 +503,19 @@ export const ReportsManagement: React.FC = () => {
 
               {/* Action toolbar */}
               <div className="px-6 py-3 border-b border-zinc-100 flex flex-wrap items-center gap-2">
+                {scope !== 'client' && (
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setSelectedClientIds([]);
+                      setSendOpen(true);
+                    }}
+                    className="bg-zinc-900 text-white hover:bg-zinc-800 h-9 rounded-lg text-xs"
+                  >
+                    <Share2 className="w-3.5 h-3.5 mr-1.5" />
+                    Send to Client
+                  </Button>
+                )}
                 <Button
                   size="sm"
                   variant="outline"
@@ -473,23 +526,27 @@ export const ReportsManagement: React.FC = () => {
                   {exporting ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5 mr-1.5 text-brand" />}
                   Save PDF
                 </Button>
-                <Button size="sm" variant="outline" className="h-9 rounded-lg text-xs border-zinc-200" onClick={() => openEdit(selectedReport)}>
-                  <Edit2 className="w-3.5 h-3.5 mr-1.5" />
-                  Edit
-                </Button>
+                {scope !== 'client' && (
+                  <Button size="sm" variant="outline" className="h-9 rounded-lg text-xs border-zinc-200" onClick={() => openEdit(selectedReport)}>
+                    <Edit2 className="w-3.5 h-3.5 mr-1.5" />
+                    Edit
+                  </Button>
+                )}
                 <Button size="sm" variant="ghost" className="h-9 rounded-lg text-xs" onClick={() => copyContent(selectedReport.contentMd || '')}>
                   {copied ? <Check className="w-3.5 h-3.5 mr-1.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5 mr-1.5" />}
                   Copy
                 </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-9 rounded-lg text-xs text-rose-500 hover:bg-rose-50 hover:text-rose-600 ml-auto"
-                  onClick={() => setDeleteTarget(selectedReport)}
-                >
-                  <Trash2 className="w-3.5 h-3.5 mr-1.5" />
-                  Delete
-                </Button>
+                {scope !== 'client' && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-9 rounded-lg text-xs text-rose-500 hover:bg-rose-50 hover:text-rose-600 ml-auto"
+                    onClick={() => setDeleteTarget(selectedReport)}
+                  >
+                    <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+                    Delete
+                  </Button>
+                )}
               </div>
 
               <ScrollArea className="flex-1 overflow-auto">
@@ -729,6 +786,62 @@ export const ReportsManagement: React.FC = () => {
             >
               {updateMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Check className="w-4 h-4 mr-2" />}
               Save Changes
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* SEND DIALOG */}
+      <Dialog open={sendOpen} onOpenChange={setSendOpen}>
+        <DialogContent className="max-w-lg rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold tracking-tight">Send Report</DialogTitle>
+            <DialogDescription className="text-zinc-500 text-sm">Select the clients to deliver this report to.</DialogDescription>
+          </DialogHeader>
+
+          <div className="py-2">
+            {reportClientsQuery.isLoading ? (
+              <div className="flex justify-center py-10">
+                <Loader2 className="w-6 h-6 animate-spin text-zinc-300" />
+              </div>
+            ) : availableClients.length === 0 ? (
+              <div className="text-center py-10 px-6 border-2 border-dashed border-zinc-200 rounded-xl">
+                <p className="text-sm font-semibold text-zinc-400">No clients available</p>
+              </div>
+            ) : (
+              <ScrollArea className="max-h-[320px] pr-3">
+                <div className="space-y-2">
+                  {availableClients.map((c) => (
+                    <label
+                      key={c.clientId}
+                      className={cn(
+                        'flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all',
+                        selectedClientIds.includes(c.clientId) ? 'border-brand bg-brand/[0.03]' : 'border-zinc-200 hover:bg-zinc-50',
+                      )}
+                    >
+                      <Checkbox checked={selectedClientIds.includes(c.clientId)} onCheckedChange={() => toggleClient(c.clientId)} />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-sm text-zinc-900 truncate">{c.clientName}</p>
+                        <p className="text-xs text-zinc-500 truncate">{c.clientEmail}{c.clientCompany ? ` · ${c.clientCompany}` : ''}</p>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </ScrollArea>
+            )}
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" className="rounded-lg h-10 border-zinc-200" onClick={() => setSendOpen(false)} disabled={sendMutation.isPending}>
+              Cancel
+            </Button>
+            <Button
+              className="bg-zinc-900 text-white hover:bg-zinc-800 rounded-lg h-10"
+              onClick={() => selectedReport && sendMutation.mutate({ id: selectedReport.id, clientIds: selectedClientIds })}
+              disabled={sendMutation.isPending || selectedClientIds.length === 0}
+            >
+              {sendMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
+              Send {selectedClientIds.length > 0 ? `(${selectedClientIds.length})` : ''}
             </Button>
           </div>
         </DialogContent>
