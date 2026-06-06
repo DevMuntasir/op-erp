@@ -180,7 +180,7 @@ export const ClientPortal: React.FC = () => {
             </CardContent>
           </Card>
 
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {/* <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             <StatCard
               title="Total Projects"
               value={clientStats.totalProjects}
@@ -217,7 +217,7 @@ export const ClientPortal: React.FC = () => {
               subtitle="Delivered and completed"
               icon={<CheckCircle2 className="h-4 w-4" />}
             />
-          </div>
+          </div> */}
         </div>
       </div>
     );
