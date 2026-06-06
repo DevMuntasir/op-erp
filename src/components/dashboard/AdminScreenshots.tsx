@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/src/App';
 import { Screenshot, User } from '@/src/types';
+import { listEmployees } from '@/src/api/endpoints/employees.api';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -17,6 +18,7 @@ export const AdminScreenshots = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [admins, setAdmins] = useState<User[]>([]);
   const [selectedAdminId, setSelectedAdminId] = useState<string>('all');
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('');
   const [selectedScreenshot, setSelectedScreenshot] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -42,39 +44,54 @@ export const AdminScreenshots = () => {
   useEffect(() => {
     if (!user) return;
 
-    const fetchData = async () => {
+    const fetchEmployees = async () => {
+      try {
+        const usersData = await listEmployees();
+        console.log('Employees fetched:', usersData);
+        setUsers(usersData);
+      } catch (error) {
+        console.error("AdminScreenshots fetchEmployees error:", error);
+      }
+    };
+
+    fetchEmployees();
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const fetchScreenshots = async () => {
       try {
         setLoading(true);
 
-        // Fetch employees
-        const usersResponse = await fetch('/v1/admin/employees/');
-        if (usersResponse.ok) {
-          const usersData = await usersResponse.json();
-          console.log('Employees fetched:', usersData);
-          setUsers(usersData);
-        } else {
-          console.error('Failed to fetch employees:', usersResponse.status);
-        }
-
-        // Fetch screenshots
         const screensResponse = await fetch('/v1/screenshots/');
-        if (screensResponse.ok) {
-          const screensData = await screensResponse.json();
-          console.log('Screenshots fetched:', screensData);
-          setScreenshots(screensData);
-        } else {
-          console.error('Failed to fetch screenshots:', screensResponse.status);
+
+        if (!screensResponse.ok) {
+          const errorText = await screensResponse.text();
+          console.error('Failed to fetch screenshots:', screensResponse.status, errorText);
+          setScreenshots([]);
+          return;
         }
 
+        let screensData = await screensResponse.json();
+        console.log('All screenshots fetched:', screensData);
+
+        // Filter by selected employee
+        if (selectedEmployeeId) {
+          screensData = screensData.filter((screen: any) => screen.userId === selectedEmployeeId);
+          console.log(`Filtered screenshots for employee ${selectedEmployeeId}:`, screensData);
+        }
+
+        setScreenshots(screensData);
         setLoading(false);
       } catch (error) {
-        console.error("AdminScreenshots fetchData error:", error);
+        console.error("AdminScreenshots fetchScreenshots error:", error);
         setLoading(false);
       }
     };
 
-    fetchData();
-  }, [user, selectedAdminId, isSuperAdmin]);
+    fetchScreenshots();
+  }, [user, selectedAdminId, selectedEmployeeId, isSuperAdmin]);
 
   const getUserName = (userId: string) => {
     const foundUser = users.find(u => u.uid === userId);
@@ -100,24 +117,42 @@ export const AdminScreenshots = () => {
             <p className="text-zinc-500 font-medium">Real-time activity tracking and employee log analysis.</p>
           </div>
 
-          {isSuperAdmin && (
+          <div className="flex items-center gap-2 flex-wrap">
+            {isSuperAdmin && (
+              <div className="flex items-center gap-2 bg-white border border-zinc-200 p-1.5 rounded-xl shadow-sm">
+                <div className="px-3 py-1 flex flex-col">
+                  <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest text-left">Internal Agency Filter</span>
+                  <Select value={selectedAdminId} onValueChange={(value) => setSelectedAdminId(value || 'all')}>
+                    <SelectTrigger className="h-8 border-none bg-transparent p-0 w-[180px] font-bold focus:ring-0">
+                      <SelectValue placeholder="All Agencies" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Global Agencies</SelectItem>
+                      {admins.map(admin => (
+                        <SelectItem key={admin.uid} value={admin.uid}>{admin.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
             <div className="flex items-center gap-2 bg-white border border-zinc-200 p-1.5 rounded-xl shadow-sm">
               <div className="px-3 py-1 flex flex-col">
-                <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest text-left">Internal Agency Filter</span>
-                <Select value={selectedAdminId} onValueChange={setSelectedAdminId}>
-                  <SelectTrigger className="h-8 border-none bg-transparent p-0 w-[180px] font-bold focus:ring-0">
-                    <SelectValue placeholder="All Agencies" />
+                <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest text-left">Employee Filter</span>
+                <Select value={selectedEmployeeId} onValueChange={(value) => setSelectedEmployeeId(value || '')}>
+                  <SelectTrigger className="h-8 border-none bg-transparent p-0 w-[200px] font-bold focus:ring-0">
+                    <SelectValue placeholder="All Employees" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Global Agencies</SelectItem>
-                    {admins.map(admin => (
-                      <SelectItem key={admin.uid} value={admin.uid}>{admin.name}</SelectItem>
+                    <SelectItem value="">All Employees</SelectItem>
+                    {users.map(employee => (
+                      <SelectItem key={employee.uid} value={employee.uid}>{employee.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
             </div>
-          )}
+          </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6">

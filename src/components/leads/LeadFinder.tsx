@@ -93,7 +93,7 @@ export const LeadFinder = () => {
       phone: lead.phone || '',
       company: lead.company || '',
       jobTitle: lead.jobTitle || '',
-      address: lead.location || lead.address || '',
+      address:  lead.address || '',
       website: lead.website || '',
       source: lead.source || 'Direct Search',
       status: (lead.status || 'new') as Lead['status'],
