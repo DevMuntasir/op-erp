@@ -107,6 +107,23 @@ function EmployeeArea() {
   );
 }
 
+function ClientArea() {
+  return (
+    <AppLayout role="client">
+      <Suspense fallback={<RouteLoader />}>
+        <Routes>
+          <Route index element={<ClientPortal />} />
+          <Route path="tasks" element={<TaskManagement />} />
+          <Route path="tasks/:taskId" element={<TaskDetail />} />
+          <Route path="reports" element={<ReportsManagement />} />
+          <Route path="billing" element={<BillingManagement />} />
+          <Route path="profile" element={<ProfilePage />} />
+        </Routes>
+      </Suspense>
+    </AppLayout>
+  );
+}
+
 function SuperAdminArea() {
   return (
     <AppLayout role="super_admin">
@@ -156,8 +173,8 @@ export function AppRouter() {
         <Route element={<ProtectedRoute roles={['employee']} />}>
           <Route path="/employee/*" element={<EmployeeArea />} />
         </Route>
-        <Route element={<ProtectedRoute roles={['client', 'admin', 'super_admin']} />}>
-          <Route path="/client/*" element={<ClientPortal />} />
+        <Route element={<ProtectedRoute roles={['client']} />}>
+          <Route path="/client/*" element={<ClientArea />} />
         </Route>
         <Route path="/" element={<RootRedirect />} />
       </Routes>

@@ -72,6 +72,7 @@ export const ClientPortal: React.FC = () => {
   const [error, setError] = useState<string>('');
 
   const isPortalManager = user?.role === 'admin' || user?.role === 'super_admin';
+  const isClient = user?.role === 'client';
 
   useEffect(() => {
     let isMounted = true;
@@ -79,6 +80,9 @@ export const ClientPortal: React.FC = () => {
     const loadClients = async () => {
       if (!isPortalManager) {
         setLoading(false);
+        if (isClient && user?.uid) {
+          setSelectedClientId(user.uid);
+        }
         return;
       }
 
@@ -104,7 +108,7 @@ export const ClientPortal: React.FC = () => {
     return () => {
       isMounted = false;
     };
-  }, [isPortalManager]);
+  }, [isPortalManager, isClient, user?.uid]);
 
   const filteredClients = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
@@ -125,15 +129,96 @@ export const ClientPortal: React.FC = () => {
 
   const stats = useMemo(() => (selectedClient ? buildDemoStats(selectedClient) : null), [selectedClient]);
 
-  if (!isPortalManager) {
+  if (isClient) {
+    const clientData = {
+      id: user?.uid || '',
+      name: user?.name || 'Client',
+      email: user?.email || '',
+      company: '',
+      website: '',
+      phone: user?.phone || '',
+      status: 'active'
+    };
+
+    const clientStats = buildDemoStats(clientData as Client);
+
     return (
-      <div className="flex min-h-[70vh] items-center justify-center p-6">
-        <Card className="w-full max-w-xl rounded-2xl border-zinc-200/80">
-          <CardHeader>
-            <CardTitle>Client Portal</CardTitle>
-            <CardDescription>You do not have access to manage client portals.</CardDescription>
-          </CardHeader>
-        </Card>
+      <div className="min-h-screen bg-zinc-50 p-4 md:p-6">
+        <div className="mx-auto w-full max-w-7xl space-y-6">
+          <Card className="rounded-3xl border-zinc-200/80 bg-white shadow-sm">
+            <CardHeader>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <CardTitle className="text-3xl font-black tracking-tight">{clientData.name}</CardTitle>
+                  <CardDescription>{clientData.email}</CardDescription>
+                </div>
+                <Badge className="bg-zinc-900 px-3 py-1 text-xs uppercase tracking-wider text-white hover:bg-zinc-900">
+                  Your Portal
+                </Badge>
+              </div>
+            </CardHeader>
+
+            <CardContent>
+              <div className="grid gap-4 text-sm text-zinc-600 md:grid-cols-2">
+                <div className="rounded-xl bg-zinc-100/70 p-4">
+                  <p className="mb-1 text-[11px] uppercase tracking-wider text-zinc-500">Company</p>
+                  <p className="font-semibold text-zinc-900">{clientData.company || 'N/A'}</p>
+                </div>
+                <div className="rounded-xl bg-zinc-100/70 p-4">
+                  <p className="mb-1 text-[11px] uppercase tracking-wider text-zinc-500">Website</p>
+                  <p className="font-semibold text-zinc-900">{clientData.website || 'N/A'}</p>
+                </div>
+                <div className="rounded-xl bg-zinc-100/70 p-4">
+                  <p className="mb-1 text-[11px] uppercase tracking-wider text-zinc-500">Phone</p>
+                  <p className="font-semibold text-zinc-900">{clientData.phone || 'N/A'}</p>
+                </div>
+                <div className="rounded-xl bg-zinc-100/70 p-4">
+                  <p className="mb-1 text-[11px] uppercase tracking-wider text-zinc-500">Status</p>
+                  <p className="font-semibold capitalize text-zinc-900">{clientData.status}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <StatCard
+              title="Total Projects"
+              value={clientStats.totalProjects}
+              subtitle="All projects under your account"
+              icon={<Briefcase className="h-4 w-4" />}
+            />
+            <StatCard
+              title="Running Projects"
+              value={clientStats.runningProjects}
+              subtitle="Currently active projects"
+              icon={<PlayCircle className="h-4 w-4" />}
+            />
+            <StatCard
+              title="Team Members"
+              value={clientStats.totalEmployees}
+              subtitle="Assigned to your projects"
+              icon={<UserRound className="h-4 w-4" />}
+            />
+            <StatCard
+              title="Total Tasks"
+              value={clientStats.totalTasks}
+              subtitle="Tasks across all projects"
+              icon={<ListTodo className="h-4 w-4" />}
+            />
+            <StatCard
+              title="Active Tasks"
+              value={clientStats.runningTasks}
+              subtitle="Tasks in progress"
+              icon={<Loader2 className="h-4 w-4" />}
+            />
+            <StatCard
+              title="Completed Tasks"
+              value={clientStats.completedTasks}
+              subtitle="Delivered and completed"
+              icon={<CheckCircle2 className="h-4 w-4" />}
+            />
+          </div>
+        </div>
       </div>
     );
   }

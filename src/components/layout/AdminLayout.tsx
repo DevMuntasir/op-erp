@@ -87,6 +87,13 @@ const navItems = {
     { icon: MessageSquare, label: 'Messages', path: '/employee/messages' },
     { icon: Phone, label: 'Call History', path: '/employee/calls' },
     { icon: UserIcon, label: 'Profile', path: '/employee/profile' },
+  ],
+  client: [
+    { icon: LayoutDashboard, label: 'Dashboard', path: '/client' },
+    { icon: CheckSquare, label: 'Tasks', path: '/client/tasks' },
+    { icon: Sparkles, label: 'Reports', path: '/client/reports' },
+    { icon: CreditCard, label: 'Billing', path: '/client/billing' },
+    { icon: UserIcon, label: 'Profile', path: '/client/profile' },
   ]
 };
 
@@ -206,7 +213,7 @@ function SidebarContent({
   );
 }
 
-export const AppLayout: React.FC<{ children: React.ReactNode, role: 'admin' | 'super_admin' | 'employee' }> = ({ children, role }) => {
+export const AppLayout: React.FC<{ children: React.ReactNode, role: 'admin' | 'super_admin' | 'employee' | 'client' }> = ({ children, role }) => {
   const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
@@ -251,7 +258,7 @@ export const AppLayout: React.FC<{ children: React.ReactNode, role: 'admin' | 's
   };
 
   const currentNavItems = navItems[role];
-  const basePath = role === 'employee' ? '/employee' : role === 'super_admin' ? '/super-admin' : '/admin';
+  const basePath = role === 'employee' ? '/employee' : role === 'super_admin' ? '/super-admin' : role === 'client' ? '/client' : '/admin';
 
   const markAllAsRead = async () => {
     if (!user || notifications.length === 0) return;
