@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/src/features/auth/AuthProvider';
 import { Loader2, LockKeyhole, Mail } from 'lucide-react';
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { StatefulButton } from '@/components/ui/stateful-button';
 import { ApiClientError } from '@/src/shared/types/api';
@@ -39,8 +39,16 @@ export function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
   const [googleSubmitting, setGoogleSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const passwordInputRef = useRef<HTMLInputElement>(null);
 
   const showPassword = email.trim().length > 0;
+
+  const handleEmailKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter' && showPassword && passwordInputRef.current) {
+      event.preventDefault();
+      passwordInputRef.current.focus();
+    }
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -138,6 +146,7 @@ export function LoginPage() {
                     setEmail(event.target.value);
                     setErrorMessage(null);
                   }}
+                  onKeyDown={handleEmailKeyDown}
                   placeholder="Email address"
                   className="h-14 rounded-full border-zinc-300 bg-white pl-14 pr-5 text-base"
                   autoComplete="email"
@@ -149,6 +158,7 @@ export function LoginPage() {
                 <div className="relative">
                   <LockKeyhole className="pointer-events-none absolute left-5 top-1/2 h-5 w-5 -translate-y-1/2 text-zinc-400" />
                   <Input
+                    ref={passwordInputRef}
                     id="password"
                     type="password"
                     value={password}
@@ -160,7 +170,6 @@ export function LoginPage() {
                     className="h-14 rounded-full border-zinc-300 bg-white pl-14 pr-5 text-base"
                     autoComplete="current-password"
                     required
-                    autoFocus
                   />
                 </div>
               ) : null}
