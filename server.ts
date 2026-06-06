@@ -717,6 +717,64 @@ async function startServer() {
     }
   });
 
+  // API: Get current user profile
+  app.get("/v1/me/", async (req: core.Request, res: core.Response) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith("Bearer ")) {
+        return res.status(401).json({
+          error: { message: "Unauthorized", code: "AUTH_REQUIRED" },
+          meta: { requestId: "N/A" }
+        });
+      }
+
+      const token = authHeader.split("Bearer ")[1];
+      const decodedToken = await authAdmin.verifyIdToken(token);
+      const uid = decodedToken.uid;
+
+      // Try users then profiles collections
+      let userData: any = null;
+      for (const col of ["users", "profiles"]) {
+        const docSnap = await dbAdmin.collection(col).doc(uid).get();
+        if (docSnap.exists) { userData = docSnap.data(); break; }
+      }
+
+      // Email fallback
+      if (!userData && decodedToken.email) {
+        for (const col of ["users", "profiles"]) {
+          const snap = await dbAdmin.collection(col)
+            .where("email", "==", decodedToken.email.toLowerCase())
+            .limit(1).get();
+          if (!snap.empty) { userData = snap.docs[0].data(); break; }
+        }
+      }
+
+      const user = {
+        uid: userData?.uid ?? uid,
+        email: userData?.email ?? decodedToken.email ?? null,
+        name: userData?.name ?? decodedToken.name ?? decodedToken.email?.split("@")[0] ?? "User",
+        role: userData?.role ?? "client",
+        adminId: userData?.adminId ?? null,
+        status: userData?.status ?? "offline",
+        lastSeen: userData?.lastSeen ?? null,
+        photoURL: userData?.photoURL ?? decodedToken.picture ?? null,
+        phone: userData?.phone ?? null,
+        phoneNumber: userData?.phoneNumber ?? null,
+        createdAt: userData?.createdAt ?? null,
+        isDisabled: userData?.isDisabled ?? false,
+        disabledAt: userData?.disabledAt ?? null,
+      };
+
+      res.json({ data: user, meta: { requestId: "N/A" } });
+    } catch (error: any) {
+      console.error("[/v1/me] Error:", error.message);
+      res.status(401).json({
+        error: { message: error.message || "Auth failed", code: "AUTH_ERROR" },
+        meta: { requestId: "N/A" }
+      });
+    }
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
