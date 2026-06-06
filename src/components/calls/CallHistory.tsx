@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { collection, query, onSnapshot, where, orderBy, limit, deleteDoc, doc } from 'firebase/firestore';
-import { db } from '@/src/lib/firebase';
 import { useAuth } from '@/src/App';
 import { Call } from '@/src/types';
+import { listCalls, deleteCall } from '@/src/api/endpoints/calls.api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -46,53 +45,51 @@ export const CallHistory = () => {
   useEffect(() => {
     if (!user) return;
 
-    let qCalls;
-    const adminId = user.role === 'admin' ? user.uid : (user.adminId || user.uid);
+    const fetchCalls = async () => {
+      try {
+        const calls = await listCalls();
 
-    if (user.role === 'super_admin') {
-      qCalls = query(collection(db, 'calls'), limit(500));
-    } else if (user.role === 'admin') {
-      qCalls = query(collection(db, 'calls'), where('adminId', '==', user.uid), limit(500));
-    } else {
-      qCalls = query(collection(db, 'calls'), where('employeeId', '==', user.uid), limit(500));
-    }
-
-    const unsub = onSnapshot(qCalls, (snap) => {
-      const fetchedCalls = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Call));
-      
-      // Multi-format date helper
-      const getTime = (ts: any) => {
-        if (!ts) return 0;
-        if (typeof ts === 'object' && ts.toMillis) return ts.toMillis();
-        if (typeof ts === 'object' && ts.seconds) return ts.seconds * 1000;
-        try {
-          return new Date(ts).getTime() || 0;
-        } catch (e) {
-          return 0;
+        // Filter based on user role
+        let filteredCalls = calls;
+        if (user.role === 'admin') {
+          filteredCalls = calls.filter(call => call.adminId === user.uid);
+        } else if (user.role === 'employee') {
+          filteredCalls = calls.filter(call => call.employeeId === user.uid);
         }
-      };
 
-      // Sort in memory to avoid missing index errors
-      const sortedCalls = fetchedCalls.sort((a, b) => {
-        return getTime(b.timestamp) - getTime(a.timestamp);
-      });
-      setCalls(sortedCalls);
-      setLoading(false);
-    }, (error) => {
-      console.error("Call History Error:", error);
-      toast.error("Failed to load call history");
-      setLoading(false);
-    });
+        // Sort by timestamp descending
+        const getTime = (ts: any) => {
+          if (!ts) return 0;
+          try {
+            return new Date(ts).getTime() || 0;
+          } catch (e) {
+            return 0;
+          }
+        };
 
-    return () => unsub();
+        const sortedCalls = filteredCalls.sort((a, b) => {
+          return getTime(b.timestamp) - getTime(a.timestamp);
+        });
+
+        setCalls(sortedCalls);
+        setLoading(false);
+      } catch (error) {
+        console.error("Call History Error:", error);
+        toast.error("Failed to load call history");
+        setLoading(false);
+      }
+    };
+
+    fetchCalls();
   }, [user]);
 
   const handleDeleteCall = async () => {
     if (!deletingCallId) return;
-    
+
     setIsDeleting(true);
     try {
-      await deleteDoc(doc(db, 'calls', deletingCallId));
+      await deleteCall(deletingCallId);
+      setCalls(calls.filter(call => call.id !== deletingCallId));
       toast.success("Call record deleted");
     } catch (error) {
       console.error("Deletion error:", error);
