@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getProposal, sendProposal } from '@/src/api/endpoints/proposals.api';
@@ -13,8 +13,6 @@ import {
   Database, Target, PlayCircle, BarChart3, Users, Zap, Search, Layout, Video
 } from 'lucide-react';
 import { toast } from 'sonner';
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
 import { BrandLogo } from '@/src/components/layout/BrandLogo';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -26,7 +24,6 @@ export const ProposalPreview = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [exporting, setExporting] = useState(false);
   const documentRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
 
@@ -60,210 +57,19 @@ export const ProposalPreview = () => {
   };
 
   const handlePrint = () => {
+    window.scrollTo(0, 0);
     window.print();
   };
 
-  const handleExportPDF = async () => {
-    if (!documentRef.current || !proposal) return;
-
-    setExporting(true);
-    const toastId = toast.loading("Generating optimized PDF document...");
-    const originalScrollY = window.scrollY;
-
-    try {
-      const element = documentRef.current;
-
-      if (!element || element.offsetWidth === 0 || element.offsetHeight === 0) {
-        toast.error("The document is currently hidden or has no size. Please ensure it is visible before exporting.", { id: toastId });
-        setExporting(false);
-        return;
-      }
-
-      window.scrollTo(0, 0);
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      const canvas = await html2canvas(element, {
-        scale: 2,
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: '#ffffff',
-        imageTimeout: 30000,
-        logging: false,
-        onclone: (clonedDoc) => {
-          const brandHex = '#ff00cc';
-          const zincHex = '#18181b';
-
-          // Inject critical styles to fix layout for PDF
-          const fixStyle = clonedDoc.createElement('style');
-          fixStyle.innerHTML = `
-            html, body {
-              width: 100% !important;
-              max-width: none !important;
-              margin: 0 !important;
-              padding: 0 !important;
-              background: white !important;
-            }
-
-            /* Remove max-width constraint that breaks layout */
-            .max-w-\\[21cm\\] { max-width: none !important; width: 100% !important; }
-
-            /* Ensure grid layouts work */
-            .grid { display: grid !important; }
-            .grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
-            .grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
-            .grid-cols-5 { grid-template-columns: repeat(5, minmax(0, 1fr)) !important; }
-            .gap-12 { gap: 3rem !important; }
-            .gap-16 { gap: 4rem !important; }
-
-            /* Ensure flex containers work */
-            .flex { display: flex !important; }
-            .flex-col { flex-direction: column !important; }
-            .flex-row { flex-direction: row !important; }
-            .items-center { align-items: center !important; }
-            .items-end { align-items: flex-end !important; }
-            .items-start { align-items: flex-start !important; }
-            .justify-center { justify-content: center !important; }
-            .justify-between { justify-content: space-between !important; }
-
-            /* Width and sizing */
-            .w-full { width: 100% !important; }
-            .w-auto { width: auto !important; }
-            .max-w-none { max-width: none !important; }
-            .max-w-6xl { max-width: 72rem !important; }
-            .max-w-4xl { max-width: 56rem !important; }
-            .max-w-3xl { max-width: 48rem !important; }
-            .max-w-2xl { max-width: 42rem !important; }
-            .mx-auto { margin-left: auto !important; margin-right: auto !important; }
-
-            /* Responsive text sizes */
-            .text-2xl { font-size: 1.5rem !important; }
-            .text-3xl { font-size: 1.875rem !important; }
-            .text-4xl { font-size: 2.25rem !important; }
-            .text-5xl { font-size: 3rem !important; }
-            .text-6xl { font-size: 3.75rem !important; }
-            .text-7xl { font-size: 4.5rem !important; }
-            .text-\\[90px\\] { font-size: 5.625rem !important; }
-            .text-\\[10px\\] { font-size: 0.625rem !important; }
-            .text-xs { font-size: 0.75rem !important; }
-            .text-sm { font-size: 0.875rem !important; }
-            .text-base { font-size: 1rem !important; }
-            .text-lg { font-size: 1.125rem !important; }
-
-            /* Spacing */
-            .px-6 { padding-left: 1.5rem !important; padding-right: 1.5rem !important; }
-            .px-8 { padding-left: 2rem !important; padding-right: 2rem !important; }
-            .px-12 { padding-left: 3rem !important; padding-right: 3rem !important; }
-            .px-16 { padding-left: 4rem !important; padding-right: 4rem !important; }
-            .py-8 { padding-top: 2rem !important; padding-bottom: 2rem !important; }
-            .py-10 { padding-top: 2.5rem !important; padding-bottom: 2.5rem !important; }
-            .py-14 { padding-top: 3.5rem !important; padding-bottom: 3.5rem !important; }
-            .py-16 { padding-top: 4rem !important; padding-bottom: 4rem !important; }
-            .py-20 { padding-top: 5rem !important; padding-bottom: 5rem !important; }
-            .py-24 { padding-top: 6rem !important; padding-bottom: 6rem !important; }
-            .py-32 { padding-top: 8rem !important; padding-bottom: 8rem !important; }
-            .py-40 { padding-top: 10rem !important; padding-bottom: 10rem !important; }
-
-            .space-y-4 > * + * { margin-top: 1rem !important; }
-            .space-y-5 > * + * { margin-top: 1.25rem !important; }
-            .space-y-7 > * + * { margin-top: 1.75rem !important; }
-            .space-y-16 > * + * { margin-top: 4rem !important; }
-            .space-y-20 > * + * { margin-top: 5rem !important; }
-            .space-y-24 > * + * { margin-top: 6rem !important; }
-            .space-y-28 > * + * { margin-top: 7rem !important; }
-          `;
-          clonedDoc.head.appendChild(fixStyle);
-
-          // Fix color styles
-          const styleTags = Array.from(clonedDoc.getElementsByTagName('style'));
-          styleTags.forEach(tag => {
-            try {
-              let css = tag.innerHTML;
-              for (let i = 0; i < 3; i++) {
-                css = css.replace(/(oklch|oklab|lab|lch|color|color-mix|light-dark)\s*\((?:[^()]*|\((?:[^()]*|\([^()]*\))*\))*\)/gi, zincHex);
-              }
-              css = css.replace(/in\s+(oklb|oklch|oklab|oklab-linear|oklch-linear|lab|lch|srgb-linear|display-p3|a98-rgb|prophoto-rgb|rec2020|xyz|xyz-d50|xyz-d65)/gi, "in srgb");
-              tag.innerHTML = css;
-            } catch (e) {
-              console.warn('Could not modify style tag', e);
-            }
-          });
-
-          const rootStyle = clonedDoc.createElement('style');
-          rootStyle.innerHTML = `
-            :root {
-              --zinc-50: #fafafa !important;
-              --zinc-100: #f4f4f5 !important;
-              --zinc-200: #e4e4e7 !important;
-              --zinc-300: #d4d4d8 !important;
-              --zinc-400: #a1a1aa !important;
-              --zinc-500: #71717a !important;
-              --zinc-600: #52525b !important;
-              --zinc-700: #3f3f46 !important;
-              --zinc-800: #27272a !important;
-              --zinc-900: #18181b !important;
-              --zinc-950: #09090b !important;
-              --brand: ${brandHex} !important;
-              --color-brand: ${brandHex} !important;
-            }
-            * {
-              -webkit-print-color-adjust: exact !important;
-              print-color-adjust: exact !important;
-            }
-          `;
-          clonedDoc.head.appendChild(rootStyle);
-
-          // Remove elements that break the layout
-          const allElements = Array.from(clonedDoc.getElementsByTagName('*'));
-          for (let i = 0; i < allElements.length; i++) {
-            const el = allElements[i] as HTMLElement;
-
-            if (el.tagName === 'CANVAS' || el.tagName === 'IMG' || el.tagName === 'SVG') {
-                const w = el.offsetWidth || parseInt(el.getAttribute('width') || '0');
-                const h = el.offsetHeight || parseInt(el.getAttribute('height') || '0');
-                if (w === 0 || h === 0) {
-                  el.style.display = 'none';
-                }
-            }
-
-            const inlineStyle = el.getAttribute('style');
-            if (inlineStyle && (inlineStyle.includes('oklch') || inlineStyle.includes('oklab'))) {
-              let newStyle = inlineStyle;
-              for (let j = 0; j < 3; j++) {
-                newStyle = newStyle.replace(/(oklch|oklab|lab|lch|color|color-mix|light-dark)\s*\((?:[^()]*|\((?:[^()]*|\([^()]*\))*\))*\)/gi, zincHex);
-              }
-              el.setAttribute('style', newStyle);
-            }
-          }
-        }
-      });
-
-      const pdfWidth = 210;
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: [pdfWidth, pdfHeight],
-        compress: true
-      });
-
-      const imgData = canvas.toDataURL('image/jpeg', 0.85);
-      pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
-
-      pdf.save(`OP_Media_${proposal.clientName.replace(/\s+/g, '_')}_Strategic_Proposal.pdf`);
-      toast.success("Professional PDF Generated!", { id: toastId });
-    } catch (err) {
-      console.error("PDF Export Error:", err);
-      toast.error("Enhanced export failed. Falling back to print.", { id: toastId });
-      window.print();
-    } finally {
-      if (typeof originalScrollY !== 'undefined') {
-        window.scrollTo(0, originalScrollY);
-      }
-      setExporting(false);
-    }
+  // Both Print and Export run through the browser's native print engine so the
+  // output is paginated into real A4 pages with clean breaks and matches the
+  // on-screen preview exactly. For Export, the user picks the "Save as PDF"
+  // destination in the print dialog.
+  const handleExportPDF = () => {
+    window.scrollTo(0, 0);
+    window.print();
   };
-  
+
 
   if (loading) return <div className="p-8 text-center bg-zinc-50 min-h-screen pt-20">Loading proposal preview...</div>;
   if (!proposal) return <div className="p-8 text-center bg-zinc-50 min-h-screen pt-20">Proposal not found.</div>;
@@ -289,10 +95,8 @@ export const ProposalPreview = () => {
             variant="outline"
             size="icon-lg"
             onClick={handleExportPDF}
-            disabled={exporting}
-            
           >
-            {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4 text-brand" /> } 
+            <FileDown className="w-4 h-4 text-brand" />
           </Button>
           <Button
           
@@ -307,7 +111,7 @@ export const ProposalPreview = () => {
       </ProposalToolbar>
 
       {/* Proposal Document */}
-      <div className="w-full max-w-[21cm] mx-auto mt-8 print:mt-0 shadow-2xl print:shadow-none px-0 sm:px-4 md:px-0">
+      <div className="proposal-print-root w-full max-w-[21cm] mx-auto mt-8 print:mt-0 shadow-2xl print:shadow-none px-0 sm:px-4 md:px-0">
         <div
           ref={documentRef}
           className="bg-white flex flex-col relative overflow-visible font-sans w-full"
@@ -322,7 +126,7 @@ export const ProposalPreview = () => {
                 <BrandLogo className="w-32 md:w-48" />
               </div>
 
-              <div className="flex flex-col items-center justify-center text-center py-20 md:py-40">
+              <div className="break-avoid flex flex-col items-center justify-center text-center py-20 md:py-40">
                 <p className="text-brand font-semibold text-xs md:text-sm mb-8 tracking-widest uppercase">Strategic Digital Growth Proposal</p>
                 <h1 className="text-7xl md:text-[90px] font-black text-zinc-900 leading-none tracking-tighter mb-8 uppercase">PROPOSAL</h1>
                 
@@ -335,7 +139,7 @@ export const ProposalPreview = () => {
                 </div>
               </div>
 
-              <div className="max-w-3xl mx-auto w-full mb-12">
+              <div className="break-avoid max-w-3xl mx-auto w-full mb-12">
                  <div className="bg-zinc-900 rounded-2xl p-10 md:p-14 flex flex-col items-center justify-center shadow-lg text-center border border-zinc-800">
                     <p className="text-zinc-400 text-xs font-semibold uppercase tracking-widest mb-4">Industry & Location</p>
                     <h3 className="text-white text-4xl md:text-6xl font-black tracking-tighter mb-5">{proposal.industry || 'DIGITAL GROWTH'}</h3>
@@ -344,9 +148,9 @@ export const ProposalPreview = () => {
                  </div>
               </div>
 
-              <div className=" gap-8 mt-12">
-                 
-            
+              <div className="break-avoid gap-8 mt-12">
+
+
                      <p className="text-xs font-semibold text-zinc-400 uppercase tracking-widest">Get In Touch</p>
                      <div className="space-y-4 text-zinc-600 font-medium w-fit text-left mt-4">
                         <p className="flex items-center gap-3 text-sm"><Phone className="w-4 h-4 text-brand" /> <span>+1 (902) 403-7871</span></p>
@@ -382,7 +186,7 @@ export const ProposalPreview = () => {
                        { label: 'SEO OPTIMIZATION', icon: Search },
                        { label: 'LEAD GENERATION', icon: Zap }
                      ].map((item, i) => (
-                       <div key={i} className="flex flex-col items-center gap-3 group">
+                       <div key={i} className="break-avoid flex flex-col items-center gap-3 group">
                           <div className="w-20 h-20 md:w-24 md:h-24 rounded-xl bg-linear-to-br from-brand/15 to-brand/5 flex items-center justify-center shadow-md hover:shadow-lg hover:from-brand/25 hover:to-brand/10 transition-all duration-300 group-hover:scale-105">
                             <item.icon className="w-9 h-9 md:w-11 md:h-11 text-brand group-hover:scale-110 transition-transform duration-300" />
                           </div>
@@ -391,7 +195,7 @@ export const ProposalPreview = () => {
                      ))}
                   </div>
 
-                  <div className="mt-24 bg-linear-to-r from-brand/5 via-transparent to-brand/5 rounded-2xl p-12 md:p-16 border border-brand/10 text-center">
+                  <div className="break-avoid mt-24 bg-linear-to-r from-brand/5 via-transparent to-brand/5 rounded-2xl p-12 md:p-16 border border-brand/10 text-center">
                      <p className="text-zinc-600 text-base md:text-lg font-medium leading-relaxed">Our expert team combines cutting-edge technology with strategic insights to deliver solutions that not only meet your current needs but anticipate future market trends and opportunities.</p>
                   </div>
                </div>
@@ -424,7 +228,7 @@ export const ProposalPreview = () => {
 
             {/* PRICING / INVESTMENT */}
             {((proposal.pricingPlans && proposal.pricingPlans.length > 0) || (proposal as any).pricingPlan) && (
-              <div className="flex flex-col items-center justify-center py-20 md:py-32 bg-zinc-900 rounded-3xl text-white overflow-hidden relative px-6 md:px-12 border border-zinc-800">
+              <div className="break-avoid break-before-page flex flex-col items-center justify-center py-20 md:py-32 bg-zinc-900 rounded-3xl text-white overflow-hidden relative px-6 md:px-12 border border-zinc-800">
                  <div className="absolute top-0 right-0 w-96 h-96 bg-brand/5 blur-3xl" />
                  <div className="absolute bottom-0 left-0 w-96 h-96 bg-brand/5 blur-3xl" />
 
@@ -440,7 +244,7 @@ export const ProposalPreview = () => {
                     )}>
                       {proposal.pricingPlans && proposal.pricingPlans.length > 0 ? (
                         proposal.pricingPlans.map((plan, pidx) => (
-                          <div key={pidx} className="bg-white/5 border border-white/10 p-8 md:p-10 rounded-3xl shadow-lg relative overflow-hidden group flex flex-col text-left hover:bg-white/10 transition-colors">
+                          <div key={pidx} className="break-avoid bg-white/5 border border-white/10 p-8 md:p-10 rounded-3xl shadow-lg relative overflow-hidden group flex flex-col text-left hover:bg-white/10 transition-colors">
                              <div className="mb-6">
                                 <Badge className="bg-brand text-white border-none px-4 py-2 rounded-full font-semibold uppercase text-xs tracking-widest mb-4">
                                    {plan.label}
@@ -464,7 +268,7 @@ export const ProposalPreview = () => {
                           </div>
                         ))
                       ) : (proposal as any).pricingPlan ? (
-                        <div className="bg-white/5 border border-white/10 p-10 md:p-14 rounded-3xl shadow-lg relative overflow-hidden group text-center max-w-2xl mx-auto w-full hover:bg-white/10 transition-colors">
+                        <div className="break-avoid bg-white/5 border border-white/10 p-10 md:p-14 rounded-3xl shadow-lg relative overflow-hidden group text-center max-w-2xl mx-auto w-full hover:bg-white/10 transition-colors">
                            <Badge className="bg-brand text-white border-none px-5 py-2 rounded-full font-semibold uppercase text-xs tracking-widest mb-6">
                               {(proposal as any).pricingPlan.type} Strategy
                            </Badge>
@@ -506,7 +310,7 @@ export const ProposalPreview = () => {
                      <p>Our comprehensive digital marketing approach is designed to build sustainable brand authority, generate qualified leads, and deliver consistent, high-quality results that directly impact your bottom line.</p>
                   </div>
 
-                  <div className="bg-brand/5 border border-brand/20 rounded-2xl p-10 md:p-14 mb-20">
+                  <div className="break-avoid bg-brand/5 border border-brand/20 rounded-2xl p-10 md:p-14 mb-20">
                      <p className="text-xs font-semibold text-brand uppercase tracking-widest mb-6">Expected Outcomes</p>
                      <div className="grid grid-cols-1 md:grid-cols-2 gap-7">
                         {[
@@ -527,7 +331,7 @@ export const ProposalPreview = () => {
                      <p className="text-5xl md:text-6xl text-zinc-900 font-black tracking-tighter">Ready to Begin?</p>
                   </div>
 
-                  <div className="border-t-2 border-zinc-200 pt-16 flex flex-col md:flex-row justify-between items-start md:items-end gap-10">
+                  <div className="break-avoid border-t-2 border-zinc-200 pt-16 flex flex-col md:flex-row justify-between items-start md:items-end gap-10">
                      <div className="space-y-4">
                         <p className="text-xs font-semibold text-zinc-400 uppercase tracking-widest letter-spacing">Prepared By</p>
                         <p className="text-3xl font-black text-zinc-900">{proposal.creatorName || 'OP Media Strategist'}</p>

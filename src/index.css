@@ -374,11 +374,17 @@
   border: none !important; 
 }
 
+@page {
+  size: A4;
+  margin: 16mm 14mm;
+}
+
 @media print {
-  .no-print {
+  .no-print,
+  .print\:hidden {
     display: none !important;
   }
-  
+
   body {
     background-color: white !important;
   }
@@ -387,33 +393,105 @@
     padding: 0 !important;
   }
 
-  /* Hide everything except the dialog content being printed */
-  #root, #root > *, header, main, footer, .no-print {
-    display: none !important;
-  }
-  
-  /* body > div[role="dialog"], body > div[data-radix-portal] {
-    display: block !important;
-    position: static !important;
-  } */
-/* 
-  div[role="dialog"] {
-    position: absolute !important;
-    left: 0 !important;
-    top: 0 !important;
+  /* Render the proposal document full-page, exactly as previewed */
+  .proposal-print-root {
+    max-width: none !important;
     width: 100% !important;
-    height: auto !important;
     margin: 0 !important;
-    padding: 0 !important;
-    background: white !important;
     box-shadow: none !important;
   }
 
-  div[role="dialog"] > div {
-    max-width: 100% !important;
-    max-height: none !important;
-    overflow: visible !important;
-  } */
+  /* Drop the screen min-height (100vh) that forced blank space / empty pages */
+  .proposal-print-root > div {
+    min-height: 0 !important;
+  }
+
+  /* The screen design uses huge scroll spacing tuned for a single long page.
+     Compress it into a page-friendly rhythm so we don't get empty pages. */
+  .proposal-print-root .space-y-24 > * + * { margin-top: 1.75rem !important; }
+  .proposal-print-root .space-y-16 > * + * { margin-top: 1.5rem !important; }
+
+  .proposal-print-root .py-16,
+  .proposal-print-root .py-20,
+  .proposal-print-root .md\:py-24,
+  .proposal-print-root .md\:py-32,
+  .proposal-print-root .md\:py-40 {
+    padding-top: 1.5rem !important;
+    padding-bottom: 1.5rem !important;
+  }
+
+  .proposal-print-root .mt-12,
+  .proposal-print-root .mt-24,
+  .proposal-print-root .md\:mt-32 { margin-top: 1.25rem !important; }
+
+  .proposal-print-root .mb-12,
+  .proposal-print-root .mb-16,
+  .proposal-print-root .mb-18,
+  .proposal-print-root .mb-20,
+  .proposal-print-root .mb-24 { margin-bottom: 1.25rem !important; }
+
+  /* Shrink the screen's oversized display headings so each section fits the
+     page height instead of overflowing onto extra/split pages. */
+  .proposal-print-root .text-\[90px\],
+  .proposal-print-root .md\:text-\[90px\] { font-size: 3rem !important; line-height: 1 !important; }
+  .proposal-print-root .text-7xl,
+  .proposal-print-root .md\:text-7xl { font-size: 2.4rem !important; line-height: 1.05 !important; }
+  .proposal-print-root .text-6xl,
+  .proposal-print-root .md\:text-6xl { font-size: 2.1rem !important; line-height: 1.05 !important; }
+  .proposal-print-root .text-5xl,
+  .proposal-print-root .md\:text-5xl { font-size: 1.9rem !important; line-height: 1.1 !important; }
+  .proposal-print-root .text-4xl,
+  .proposal-print-root .md\:text-4xl { font-size: 1.6rem !important; line-height: 1.1 !important; }
+
+  /* Start a major section on a fresh page so big boxes aren't split */
+  .proposal-print-root .break-before-page {
+    break-before: page;
+    page-break-before: always;
+  }
+
+  /* Avoid leaving 1-2 dangling lines at a page edge */
+  .proposal-print-root p,
+  .proposal-print-root li {
+    orphans: 3;
+    widows: 3;
+  }
+
+  /* Keep atomic blocks (cards, boxes, contact, signature) whole on a page */
+  .proposal-print-root .break-avoid {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Never split an individual paragraph / list row / heading across a page,
+     so lines don't get sliced in half ("kete jacce"). */
+  .proposal-print-root .markdown-content p,
+  .proposal-print-root .markdown-content li,
+  .proposal-print-root .markdown-content tr,
+  .proposal-print-root .markdown-content blockquote,
+  .proposal-print-root .markdown-content img,
+  .proposal-print-root .markdown-content table,
+  .proposal-print-root .markdown-content h1,
+  .proposal-print-root .markdown-content h2,
+  .proposal-print-root .markdown-content h3 {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Don't strand a heading at the bottom of a page away from its content */
+  .proposal-print-root h1,
+  .proposal-print-root h2,
+  .proposal-print-root h3,
+  .proposal-print-root h4 {
+    break-after: avoid-page;
+    page-break-after: avoid;
+  }
+
+  /* Ensure dark panels, brand colors and gradients print their backgrounds */
+  .proposal-print-root,
+  .proposal-print-root * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
 
   #invoice-capture {
     box-shadow: none !important;

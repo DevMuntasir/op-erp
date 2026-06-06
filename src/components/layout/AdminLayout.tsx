@@ -261,8 +261,8 @@ export const AppLayout: React.FC<{ children: React.ReactNode, role: 'admin' | 's
   };
 
   return (
-    <div className="flex h-screen bg-zinc-50 overflow-hidden font-sans">
-      <aside className="hidden lg:flex w-72 h-full bg-white border-r border-zinc-200 flex-col shrink-0 shadow-[1px_0_10_rgba(0,0,0,0.02)]">
+    <div className="flex h-screen bg-zinc-50 overflow-hidden font-sans print:h-auto print:overflow-visible print:block">
+      <aside className="print:hidden hidden lg:flex w-72 h-full bg-white border-r border-zinc-200 flex-col shrink-0 shadow-[1px_0_10_rgba(0,0,0,0.02)]">
         <SidebarContent 
           user={user} 
           currentNavItems={currentNavItems} 
@@ -275,8 +275,8 @@ export const AppLayout: React.FC<{ children: React.ReactNode, role: 'admin' | 's
         />
       </aside>
 
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
-        <header className="h-14 sm:h-16 bg-white border-b border-zinc-200 flex items-center justify-between px-3 sm:px-6 lg:px-8 shrink-0 sticky top-0 z-30">
+      <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative print:overflow-visible print:block">
+        <header className="print:hidden h-14 sm:h-16 bg-white border-b border-zinc-200 flex items-center justify-between px-3 sm:px-6 lg:px-8 shrink-0 sticky top-0 z-30">
           <div className="flex items-center gap-2 sm:gap-4 lg:flex-1">
             <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
               <SheetTrigger render={
@@ -413,12 +413,12 @@ export const AppLayout: React.FC<{ children: React.ReactNode, role: 'admin' | 's
         </header>
 
 
-          <div className="flex-1 flex flex-col min-h-0 relative overflow-y-auto">
+          <div className="flex-1 flex flex-col min-h-0 relative overflow-y-auto print:overflow-visible print:block">
             {children}
           </div>
 
           {/* Mobile Bottom Navigation - "App Feel" */}
-          <nav className="lg:hidden h-16 bg-white border-t border-zinc-200 flex items-center justify-around px-2 pb-safe shrink-0 z-40 shadow-[0_-5px_15px_rgba(0,0,0,0.03)]">
+          <nav className="print:hidden lg:hidden h-16 bg-white border-t border-zinc-200 flex items-center justify-around px-2 pb-safe shrink-0 z-40 shadow-[0_-5px_15px_rgba(0,0,0,0.03)]">
             {currentNavItems.slice(0, 5).map((item) => {
               const isActive = location.pathname === item.path;
               return (
