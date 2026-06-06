@@ -1,4 +1,4 @@
-import { getApiData, deleteApiData, patchApiData } from '@/src/api/client';
+import { getApiData, deleteApiData, patchApiData, postApiData } from '@/src/api/client';
 import { Call } from '@/src/shared/types/domain';
 
 interface ApiCall {

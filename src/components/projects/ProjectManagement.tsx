@@ -150,6 +150,7 @@ export const ProjectManagement = () => {
   const [createClientForm, setCreateClientForm] = useState<CreateClientFormState>(initialCreateClientFormState);
   const [showCreateEmployee, setShowCreateEmployee] = useState(false);
   const [createEmployeeForm, setCreateEmployeeForm] = useState<CreateEmployeeFormState>(initialCreateEmployeeFormState);
+  const [nextEditStep, setNextEditStep] = useState<EditStep | null>(null);
 
   const projectsQuery = useQuery({
     queryKey: queryKeys.projects({ scope: user?.role ?? 'anonymous' }),
@@ -188,6 +189,7 @@ export const ProjectManagement = () => {
     setEditStep('details');
     setEditingProject(null);
     setIsEditing(false);
+    setNextEditStep(null);
   };
 
   const updateMutation = useMutation({
@@ -195,7 +197,12 @@ export const ProjectManagement = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.projects({ scope: user?.role ?? 'anonymous' }) });
       toast.success('Project updated successfully');
-      resetForm();
+      if (nextEditStep) {
+        setEditStep(nextEditStep);
+        setNextEditStep(null);
+      } else {
+        resetForm();
+      }
     },
     onError: (error: Error) => {
       toast.error('Failed to update project', { description: error.message });
@@ -279,14 +286,14 @@ export const ProjectManagement = () => {
 
     if (!editingProject) return;
 
+    if (nextStep) {
+      setNextEditStep(nextStep);
+    }
+
     await updateMutation.mutateAsync({
       id: editingProject.id,
       body: toProjectUpdatePayload(form),
     });
-
-    if (nextStep) {
-      setEditStep(nextStep);
-    }
   };
 
   const handleSelectClient = async (clientId: string) => {
@@ -548,10 +555,10 @@ export const ProjectManagement = () => {
       </Card>
 
       <Dialog open={!!viewingProject} onOpenChange={(open) => !open && setViewingProject(null)}>
-        <DialogContent className="max-w-xl rounded-2xl border-zinc-200">
+        <DialogContent className="w-[95vw] sm:w-full sm:max-w-xl rounded-2xl border-zinc-200">
           <DialogHeader>
-            <DialogTitle className="text-xl font-bold">{viewingProject?.title}</DialogTitle>
-            <DialogDescription>Detailed project information and related data.</DialogDescription>
+            <DialogTitle className="text-lg sm:text-xl font-bold truncate">{viewingProject?.title}</DialogTitle>
+            <DialogDescription className="text-xs sm:text-sm">Detailed project information and related data.</DialogDescription>
           </DialogHeader>
 
           {projectDetailsQuery.isLoading ? (
@@ -559,8 +566,8 @@ export const ProjectManagement = () => {
               <div className="w-6 h-6 border-2 border-zinc-200 border-t-zinc-800 rounded-full animate-spin" />
             </div>
           ) : projectDetailsQuery.data ? (
-            <div className="space-y-5">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-5 text-sm sm:text-base">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div className="rounded-xl border border-zinc-200 bg-zinc-50/50 p-4">
                   <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Status</p>
                   <Badge className={`mt-2 rounded-xl px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider border-none shadow-sm ${getProjectStatusClass(projectDetailsQuery.data.status)}`}>
@@ -622,15 +629,53 @@ export const ProjectManagement = () => {
       </Dialog>
 
       <Dialog open={isEditing} onOpenChange={(open) => !open && resetForm()}>
-        <DialogContent className="max-w-[70%] max-h-[90vh] min-h-0 overflow-hidden flex flex-col p-0 rounded-2xl border-zinc-200">
-          <DialogHeader className="p-6 border-b border-zinc-100 bg-zinc-50/50">
-            <DialogTitle className="text-xl font-bold">Edit Project</DialogTitle>
-            <DialogDescription>Update project details, assign clients, and create tasks.</DialogDescription>
+        <DialogContent className="w-[95vw] sm:w-full md:max-w-[70%] max-h-[90vh] min-h-0 overflow-hidden flex flex-col p-0 rounded-2xl border-zinc-200">
+          <DialogHeader className="p-4 sm:p-6 border-b border-zinc-100 bg-zinc-50/50">
+            <DialogTitle className="text-lg sm:text-xl font-bold">Edit Project</DialogTitle>
+            <DialogDescription className="text-xs sm:text-sm">Update project details, assign clients, and create tasks.</DialogDescription>
           </DialogHeader>
 
-          <div className="flex-1 overflow-hidden flex min-h-0">
-            {/* Vertical Stepper */}
-            <div className="w-48 border-r border-zinc-100 bg-zinc-50/50 p-6 overflow-y-auto">
+          <div className="flex-1 overflow-hidden flex flex-col md:flex-row min-h-0">
+            {/* Horizontal Stepper - Mobile Only */}
+            <div className="md:hidden border-b border-zinc-100 bg-zinc-50/50 p-4 overflow-x-auto">
+              <div className="flex gap-2">
+                {editSteps.map((step, index) => (
+                  <button
+                    key={step.id}
+                    onClick={() => {
+                      const currentStepIndex = editSteps.findIndex((s) => s.id === editStep);
+                      if (currentStepIndex >= index) {
+                        setEditStep(step.id);
+                      }
+                    }}
+                    disabled={editSteps.findIndex((s) => s.id === editStep) < index}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all flex-shrink-0 ${
+                      editStep === step.id
+                        ? 'bg-zinc-900 text-white'
+                        : editSteps.findIndex((s) => s.id === editStep) > index
+                          ? 'bg-emerald-100 text-emerald-700'
+                          : 'bg-zinc-200 text-zinc-600 opacity-50 cursor-not-allowed'
+                    }`}
+                  >
+                    <div
+                      className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                        editStep === step.id
+                          ? 'bg-white text-zinc-900'
+                          : editSteps.findIndex((s) => s.id === editStep) > index
+                            ? 'bg-emerald-700 text-white'
+                            : 'bg-zinc-400'
+                      }`}
+                    >
+                      {editSteps.findIndex((s) => s.id === editStep) > index ? <Check className="w-3 h-3" /> : index + 1}
+                    </div>
+                    <span className="hidden sm:inline">{step.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Vertical Stepper - Desktop Only */}
+            <div className="hidden md:block w-48 border-r border-zinc-100 bg-zinc-50/50 p-6 overflow-y-auto">
               <div className="space-y-4">
                 {editSteps.map((step, index) => (
                   <div key={step.id}>
@@ -678,9 +723,9 @@ export const ProjectManagement = () => {
             </div>
 
             {/* Content Area */}
-            <div className="flex-1 overflow-y-auto p-6">
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6">
               <div className="mb-6">
-                <h3 className="text-lg font-bold text-zinc-900">{editSteps.find((s) => s.id === editStep)?.label}</h3>
+                <h3 className="text-base sm:text-lg font-bold text-zinc-900">{editSteps.find((s) => s.id === editStep)?.label}</h3>
               </div>
 
               {editStep === 'details' && (
@@ -797,7 +842,7 @@ export const ProjectManagement = () => {
                           />
                         </div>
 
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                           <div className="space-y-1">
                             <Label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Phone</Label>
                             <Input
@@ -975,7 +1020,7 @@ export const ProjectManagement = () => {
                         />
                       </div>
 
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <div className="flex items-center justify-between gap-2">
                             <Label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Assign To *</Label>

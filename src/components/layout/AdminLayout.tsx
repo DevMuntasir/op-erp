@@ -84,6 +84,8 @@ const navItems = {
     { icon: UserPlus, label: 'Leads', path: '/employee/leads' },
     // { icon: FileText, label: 'Proposals', path: '/employee/proposals' },
     // { icon: Map, label: 'Lead Finder', path: '/employee/finder' },
+    // { icon: FileText, label: 'Proposals', path: '/super-admin/proposals' },
+
     { icon: MessageSquare, label: 'Messages', path: '/employee/messages' },
     { icon: Phone, label: 'Call History', path: '/employee/calls' },
     { icon: UserIcon, label: 'Profile', path: '/employee/profile' },
