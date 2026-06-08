@@ -1,13 +1,7 @@
 import React, { useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '@/src/App';
-import { listEmployees } from '@/src/api/endpoints/employees.api';
-import { listTasks } from '@/src/api/endpoints/tasks.api';
-import { listSessions } from '@/src/api/endpoints/sessions.api';
-import { listScreenshots } from '@/src/api/endpoints/screenshots.api';
-import { listInvoices } from '@/src/api/endpoints/invoices.api';
-import { queryKeys } from '@/src/shared/constants/query-keys';
+import { useEmployees, useTasks, useSessions, useScreenshots, useInvoices } from '@/src/hooks/useApiQueries';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -26,40 +20,11 @@ export const DashboardOverview = () => {
   const location = useLocation();
   const isDashboardPage = location.pathname.includes('/dashboard') || !!location.pathname.match(/\/(admin|super-admin|employee)$/);
 
-  const employeesQuery = useQuery({
-    queryKey: queryKeys.employees,
-    queryFn: listEmployees,
-    enabled: user?.role === 'admin' || user?.role === 'super_admin',
-    refetchInterval: 30_000,
-  });
-
-  const tasksQuery = useQuery({
-    queryKey: queryKeys.tasks({ dashboard: true }),
-    queryFn: listTasks,
-    enabled: !!user,
-    refetchInterval: 30_000,
-  });
-
-  const sessionsQuery = useQuery({
-    queryKey: queryKeys.sessions({ dashboard: true }),
-    queryFn: listSessions,
-    enabled: !!user && isDashboardPage,
-    refetchInterval: isDashboardPage ? 10_000 : false,
-  });
-
-  const screenshotsQuery = useQuery({
-    queryKey: queryKeys.screenshots({ dashboard: true }),
-    queryFn: listScreenshots,
-    enabled: !!user,
-    refetchInterval: 30_000,
-  });
-
-  const invoicesQuery = useQuery({
-    queryKey: queryKeys.invoices({ dashboard: true }),
-    queryFn: listInvoices,
-    enabled: !!user,
-    refetchInterval: 30_000,
-  });
+  const employeesQuery = useEmployees();
+  const tasksQuery = useTasks({ dashboard: true });
+  const sessionsQuery = useSessions({ dashboard: true }, isDashboardPage);
+  const screenshotsQuery = useScreenshots({ dashboard: true });
+  const invoicesQuery = useInvoices({ dashboard: true });
 
   const employees = employeesQuery.data ?? [];
   const tasks = tasksQuery.data ?? [];

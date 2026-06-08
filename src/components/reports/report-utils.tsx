@@ -143,14 +143,28 @@ export const exportReportPDF = async (
 
   try {
     window.scrollTo(0, 0);
-    await new Promise((resolve) => setTimeout(resolve, 800));
+    const scrollArea = element.parentElement?.querySelector('[role="region"]');
+    if (scrollArea) {
+      scrollArea.scrollTop = 0;
+    }
+
+    const images = Array.from(element.querySelectorAll('img'));
+    await Promise.all(images.map(img => new Promise(resolve => {
+      if (img.complete) {
+        resolve(null);
+      } else {
+        img.onload = () => resolve(null);
+        img.onerror = () => resolve(null);
+      }
+    })));
+    await new Promise((resolve) => setTimeout(resolve, 500));
 
     const canvas = await html2canvas(element, {
-      scale: 1.5,
+      scale: 2,
       useCORS: true,
       allowTaint: true,
       backgroundColor: '#ffffff',
-      imageTimeout: 30000,
+      imageTimeout: 45000,
       logging: false,
       ignoreElements: (el) => {
         if (el instanceof HTMLElement) {
@@ -165,10 +179,13 @@ export const exportReportPDF = async (
       onclone: (clonedDoc) => {
         const clonedElement = clonedDoc.getElementById(elementId);
         if (clonedElement) {
-          clonedElement.style.width = '1000px';
+          const actualWidth = element.offsetWidth;
+          clonedElement.style.width = `${actualWidth}px`;
           clonedElement.style.padding = '60px';
           clonedElement.style.backgroundColor = '#ffffff';
           clonedElement.style.borderRadius = '0px';
+          clonedElement.style.margin = '0';
+          clonedElement.style.boxSizing = 'border-box';
         }
 
         const styleTags = Array.from(clonedDoc.getElementsByTagName('style'));
@@ -228,20 +245,32 @@ export const exportReportPDF = async (
             box-shadow: none !important;
             text-shadow: none !important;
           }
+          html, body {
+            background-color: #ffffff !important;
+            color: #18181b !important;
+          }
           h1, h2, h3, h4, h5, h6, strong, b {
             font-weight: 900 !important;
             letter-spacing: -0.04em !important;
             color: #18181b !important;
           }
           .bg-brand { background-color: ${brandHex} !important; }
+          .bg-brand\/10 { background-color: rgba(255, 0, 204, 0.1) !important; }
+          .bg-brand\/50 { background-color: rgba(255, 0, 204, 0.5) !important; }
           .text-brand { color: ${brandHex} !important; }
+          .bg-zinc-50 { background-color: #fafafa !important; }
+          .bg-zinc-100 { background-color: #f4f4f5 !important; }
           .bg-zinc-900 { background-color: #18181b !important; }
           .bg-zinc-950 { background-color: #09090b !important; }
           .text-zinc-900 { color: #18181b !important; }
+          .text-zinc-700 { color: #3f3f46 !important; }
           .text-zinc-600 { color: #52525b !important; }
+          .text-zinc-500 { color: #71717a !important; }
           .text-zinc-400 { color: #a1a1aa !important; }
+          .text-white { color: #ffffff !important; }
           .border-zinc-100 { border-color: #f4f4f5 !important; }
           .border-zinc-200 { border-color: #e4e4e7 !important; }
+          .border-brand { border-color: ${brandHex} !important; }
 
           .markdown-body { line-height: 1.6 !important; color: #18181b !important; }
           .markdown-body h1 {
