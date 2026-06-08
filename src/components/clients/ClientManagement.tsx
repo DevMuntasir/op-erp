@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/src/App';
 import { Client, CurrencyCode, SUPPORTED_CURRENCIES, User } from '@/src/types';
 import { Button } from '@/components/ui/button';
@@ -16,9 +16,7 @@ import { ConfirmDialog } from '@/src/components/shared/dialogs/ConfirmDialog';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { createClient, deleteClient, updateClient } from '@/src/api/endpoints/clients.api';
 import type { CreateClientRequest, UpdateClientRequest } from '@/src/api/endpoints/clients.api';
-import { listClients } from '@/src/api/endpoints/clients.api';
-import { listEmployees } from '@/src/api/endpoints/employees.api';
-import { queryKeys } from '@/src/shared/constants/query-keys';
+import { useClients, useEmployees } from '@/src/hooks/useApiQueries';
 import { formatCurrency } from '@/src/lib/utils';
 
 type ClientFormState = {
@@ -97,7 +95,7 @@ const getAdminLabel = (adminId: string, currentUser: User | null) => {
   return adminId.length > 12 ? `${adminId.slice(0, 6)}...${adminId.slice(-4)}` : adminId;
 };
 
-export const ClientManagement = () => {
+const ClientManagementComponent = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [isAdding, setIsAdding] = useState(false);
@@ -112,17 +110,8 @@ export const ClientManagement = () => {
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
   const isSuperAdmin = user?.role === 'super_admin';
 
-  const clientsQuery = useQuery({
-    queryKey: queryKeys.clients({ scope: user?.role ?? 'anonymous' }),
-    queryFn: listClients,
-    enabled: !!user,
-  });
-
-  const employeesQuery = useQuery({
-    queryKey: queryKeys.employees,
-    queryFn: listEmployees,
-    enabled: !!user && isAdmin,
-  });
+  const clientsQuery = useClients();
+  const employeesQuery = useEmployees({ enabled: isAdmin });
 
   const normalizedClients = useMemo(() => (clientsQuery.data ?? []).map(normalizeClient), [clientsQuery.data]);
   const employees = useMemo(() => (employeesQuery.data ?? []).filter((employee) => employee.role === 'employee'), [employeesQuery.data]);
@@ -680,3 +669,5 @@ export const ClientManagement = () => {
     </div>
   );
 };
+
+export const ClientManagement = React.memo(ClientManagementComponent);

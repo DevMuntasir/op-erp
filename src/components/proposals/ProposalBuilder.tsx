@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { doc, getDoc, setDoc, addDoc, collection, serverTimestamp, updateDoc } from 'firebase/firestore';
-import { db } from '@/src/lib/firebase';
 import { useAuth } from '@/src/App';
+import { getApiData, postApiData, patchApiData } from '@/src/api/client';
 import { Proposal, ProposalSection, ProposalStatus, CurrencyCode, SUPPORTED_CURRENCIES } from '@/src/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -76,30 +75,27 @@ export const ProposalBuilder = () => {
 
   const loadProposal = async (proposalId: string) => {
     try {
-      const docSnap = await getDoc(doc(db, 'proposals', proposalId));
-      if (docSnap.exists()) {
-        const data = docSnap.data() as Proposal;
-        setTitle(data.title);
-        setClientName(data.clientName);
-        setClientEmail(data.clientEmail || '');
-        setIndustry(data.industry || '');
-        setLocation(data.location || '');
-        setStatus(data.status);
-        setCurrency(data.currency || 'USD');
-        setSections(data.sections || []);
-        setTotalValue(data.totalValue || 0);
-        
-        // Handle goals as string (legacy) or array
-        if (typeof data.goals === 'string') {
-          setGoals([data.goals]);
-        } else {
-          setGoals(data.goals || []);
-        }
+      const data = await getApiData(`/v1/proposals/${proposalId}`) as Proposal;
+      setTitle(data.title);
+      setClientName(data.clientName);
+      setClientEmail(data.clientEmail || '');
+      setIndustry(data.industry || '');
+      setLocation(data.location || '');
+      setStatus(data.status);
+      setCurrency(data.currency || 'USD');
+      setSections(data.sections || []);
+      setTotalValue(data.totalValue || 0);
 
-        // Check if industry is custom
-        if (data.industry && !INDUSTRIES.slice(0, -1).includes(data.industry)) {
-          setIsCustomIndustry(true);
-        }
+      // Handle goals as string (legacy) or array
+      if (typeof data.goals === 'string') {
+        setGoals([data.goals]);
+      } else {
+        setGoals(data.goals || []);
+      }
+
+      // Check if industry is custom
+      if (data.industry && !INDUSTRIES.slice(0, -1).includes(data.industry)) {
+        setIsCustomIndustry(true);
       }
     } catch (err) {
       toast.error("Failed to load proposal");
@@ -130,19 +126,19 @@ export const ProposalBuilder = () => {
         adminId,
         createdBy: user?.uid,
         creatorName: user?.name,
-        updatedAt: serverTimestamp()
+        updatedAt: new Date().toISOString()
       };
 
       if (id) {
-        await updateDoc(doc(db, 'proposals', id), proposalData);
+        await patchApiData(`/v1/proposals/${id}`, proposalData);
         toast.success("Proposal updated");
       } else {
-        const newDoc = await addDoc(collection(db, 'proposals'), {
+        const response = await postApiData('/v1/proposals/', {
           ...proposalData,
-          createdAt: serverTimestamp()
+          createdAt: new Date().toISOString()
         });
         toast.success("Proposal created");
-        navigate(`${basePath}/proposals/edit/${newDoc.id}`);
+        navigate(`${basePath}/proposals/edit/${response.id}`);
       }
     } catch (err) {
       console.error(err);

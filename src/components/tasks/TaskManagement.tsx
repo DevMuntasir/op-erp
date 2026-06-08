@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/src/App';
 import { Task, User, TaskPriority, TaskStatus, TaskSubmission, Client, Project } from '@/src/types';
 import { Button } from '@/components/ui/button';
@@ -18,11 +18,7 @@ import { formatDateTimeHalifax, formatToHalifax } from '@/src/lib/presence';
 import { TaskChat } from './TaskChat';
 import { ConfirmDialog } from '@/src/components/shared/dialogs/ConfirmDialog';
 import { listTasks, createTask, updateTask, deleteTask as deleteTaskRequest } from '@/src/api/endpoints/tasks.api';
-import { listEmployees } from '@/src/api/endpoints/employees.api';
-import { listClients } from '@/src/api/endpoints/clients.api';
-import { listProjects } from '@/src/api/endpoints/projects.api';
-import { listSessions } from '@/src/api/endpoints/sessions.api';
-import { queryKeys } from '@/src/shared/constants/query-keys';
+import { useTasks, useEmployees, useClients, useProjects, useUserSessions } from '@/src/hooks/useApiQueries';
 import { startTaskWork } from '@/src/shared/tasks/start-task-work';
 
 const toDate = (value: unknown): Date | null => {
@@ -89,7 +85,7 @@ const resetTaskForm = (
   setSelectedProjectId('');
 };
 
-export const TaskManagement = () => {
+const TaskManagementComponent = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -129,12 +125,11 @@ export const TaskManagement = () => {
   const [proofUrl, setProofUrl] = useState('');
   const [startingTaskId, setStartingTaskId] = useState<string | null>(null);
 
-  const sessionsQuery = useQuery({
-    queryKey: queryKeys.sessions({ scope: 'me' }),
-    queryFn: listSessions,
-    enabled: !!user && !isAdmin,
-    refetchInterval: 10_000,
-  });
+  const tasksQuery = useTasks({}, { refetchOnWindowFocus: false });
+  const employeesQuery = useEmployees({ enabled: isAdmin });
+  const clientsQuery = useClients(undefined, { enabled: isAdmin });
+  const projectsQuery = useProjects(undefined, { enabled: isAdmin });
+  const sessionsQuery = useUserSessions();
 
   const activeSession = useMemo(
     () => sessionsQuery.data?.find((session) => session.userId === user?.uid && session.status === 'active') ?? null,
@@ -143,43 +138,21 @@ export const TaskManagement = () => {
 
   useEffect(() => {
     if (!user) return;
-    let cancelled = false;
 
-    const load = async () => {
-      setLoading(true);
-      try {
-        const [taskData, employeeData, clientData, projectData] = await Promise.all([
-          listTasks(),
-          isAdmin ? listEmployees() : Promise.resolve([] as User[]),
-          isAdmin ? listClients() : Promise.resolve([] as Client[]),
-          isAdmin ? listProjects() : Promise.resolve([] as Project[]),
-        ]);
+    setTasks(tasksQuery.data ?? []);
+    setAllUsers((employeesQuery.data ?? []).filter((employee) => employee.role === 'employee'));
+    setClients(clientsQuery.data ?? []);
+    setProjects(projectsQuery.data ?? []);
 
-        if (cancelled) return;
+    const isLoading = tasksQuery.isLoading || (isAdmin && employeesQuery.isLoading) || (isAdmin && clientsQuery.isLoading);
+    setLoading(isLoading);
 
-        setTasks(taskData);
-        setAllUsers(employeeData.filter((employee) => employee.role === 'employee'));
-        setClients(clientData);
-        setProjects(projectData);
-      } catch (error: any) {
-        if (cancelled) return;
-        console.error('Failed to load task management data:', error);
-        toast.error('Failed to load tasks', {
-          description: error?.message || 'Please check your connection and try again.',
-        });
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    };
-
-    void load();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isAdmin, user?.uid]);
+    if (tasksQuery.isError) {
+      toast.error('Failed to load tasks', {
+        description: 'Please check your connection and try again.',
+      });
+    }
+  }, [tasksQuery.data, employeesQuery.data, clientsQuery.data, projectsQuery.data, tasksQuery.isLoading, tasksQuery.isError, isAdmin, user]);
 
   const reloadTasks = async () => {
     const taskData = await listTasks();
@@ -1016,3 +989,5 @@ export const TaskManagement = () => {
     </div>
   );
 };
+
+export const TaskManagement = React.memo(TaskManagementComponent);

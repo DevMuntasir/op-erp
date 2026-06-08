@@ -1,13 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { 
-  CreditCard, 
-  Search, 
-  Filter, 
-  ArrowUpRight, 
-  ArrowDownLeft, 
-  Clock, 
-  CheckCircle, 
-  AlertCircle, 
+import {
+  CreditCard,
+  Search,
+  Filter,
+  ArrowUpRight,
+  ArrowDownLeft,
+  Clock,
+  CheckCircle,
+  AlertCircle,
   FileText,
   Calendar,
   Receipt,
@@ -18,9 +18,9 @@ import {
   User,
   Layers
 } from 'lucide-react';
-import { collection, query, orderBy, onSnapshot, limit, where, addDoc, updateDoc, doc, serverTimestamp, getDocs } from 'firebase/firestore';
-import { db } from '@/src/lib/firebase';
 import { useAuth } from '@/src/App';
+import { useClients, useInvoices } from '@/src/hooks/useApiQueries';
+import { patchApiData, postApiData } from '@/src/api/client';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -454,58 +454,15 @@ const BillingManagement: React.FC = () => {
     }, 800);
   };
 
+  // Fetch clients and invoices using shared API hooks
+  const clientsQuery = useClients();
+  const invoicesQuery = useInvoices();
+
   useEffect(() => {
-    if (!user) return;
-
-    // Fetch clients with proper isolation
-    let qClients;
-    if (user.role === 'super_admin') {
-      qClients = query(collection(db, 'clients'), orderBy('name', 'asc'));
-    } else if (user.role === 'admin') {
-      qClients = query(collection(db, 'clients'), where('adminId', '==', user.uid), orderBy('name', 'asc'));
-    } else {
-      // Employee sees clients they created or are assigned to
-      qClients = query(collection(db, 'clients'), where('createdBy', '==', user.uid), orderBy('name', 'asc'));
-    }
-
-    const unsubClients = onSnapshot(qClients, (snap) => {
-      setClients(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Client)));
-    }, (err) => {
-      console.error("Fetch clients error:", err);
-      // Fallback for employee if createdBy is empty (checking assignedEmployees instead)
-      if (user.role === 'employee' && err.message.includes('permission-denied')) {
-        const qFallback = query(collection(db, 'clients'), where('assignedEmployees', 'array-contains', user.uid), orderBy('name', 'asc'));
-        onSnapshot(qFallback, (s) => setClients(s.docs.map(d => ({ id: d.id, ...d.data() } as Client))));
-      }
-    });
-
-    // Fetch all payments/invoices with proper isolation
-    let qPayments;
-    if (user.role === 'super_admin') {
-      qPayments = query(collection(db, 'payments'), orderBy('createdAt', 'desc'), limit(200));
-    } else if (user.role === 'admin') {
-      qPayments = query(collection(db, 'payments'), where('adminId', '==', user.uid), orderBy('createdAt', 'desc'), limit(200));
-    } else {
-      qPayments = query(collection(db, 'payments'), where('issuedBy', '==', user.uid), orderBy('createdAt', 'desc'), limit(200));
-    }
-
-    const unsubscribe = onSnapshot(qPayments, (snap) => {
-      const docs = snap.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      } as InvoiceRecord));
-      setInvoices(docs);
-      setLoading(false);
-    }, (err) => {
-      console.error("Fetch payments error:", err);
-      setLoading(false);
-    });
-
-    return () => {
-      unsubClients();
-      unsubscribe();
-    };
-  }, [user]);
+    setClients(clientsQuery.data ?? []);
+    setInvoices(invoicesQuery.data ?? []);
+    setLoading(clientsQuery.isLoading || invoicesQuery.isLoading);
+  }, [clientsQuery.data, clientsQuery.isLoading, invoicesQuery.data, invoicesQuery.isLoading]);
 
   const addLineItem = () => {
     setLineItems([...lineItems, { id: Math.random().toString(), description: '', quantity: 1, price: 0 }]);
@@ -535,11 +492,6 @@ const BillingManagement: React.FC = () => {
     setIsSaving(true);
     try {
       const clientEmail = selectedClient.email.toLowerCase().trim();
-      
-      // Find userId
-      const uSnap = await getDocs(query(collection(db, 'users'), where('email', '==', clientEmail), limit(1)));
-      const userId = uSnap.empty ? clientEmail : uSnap.docs[0].id;
-
       const description = invoiceNote || `Services for ${selectedClient.name}`;
       const itemsPlain = lineItems.map(item => ({
         description: item.description,
@@ -547,8 +499,8 @@ const BillingManagement: React.FC = () => {
         price: Number(item.price)
       }));
 
-      await addDoc(collection(db, 'payments'), {
-        userId,
+      // Create invoice via API (backend handles userId lookup, timestamps, etc.)
+      await postApiData('/v1/invoices/', {
         clientEmail,
         clientName: selectedClient.name,
         amount: total,
@@ -557,21 +509,16 @@ const BillingManagement: React.FC = () => {
         type: 'invoice',
         message: description,
         lineItems: itemsPlain,
-        paymentDate: null,
-        createdAt: serverTimestamp(),
         issuedBy: user?.uid,
         adminId: user?.role === 'admin' ? user.uid : (user?.adminId || user?.uid),
-        isManual: true,
-        generatorUsed: true
       });
 
-      await addDoc(collection(db, 'notifications'), {
-        userId,
+      // Create notification via API
+      await postApiData('/v1/notifications/', {
+        userId: selectedClient.id,
         title: 'New Invoice Issued',
         message: `An invoice for ${formatCurrency(total, selectedCurrency)} has been generated and is ready for payment.`,
         type: 'billing',
-        read: false,
-        createdAt: serverTimestamp()
       });
 
       toast.success("Invoice generated successfully");
@@ -599,7 +546,7 @@ const BillingManagement: React.FC = () => {
 
   const handleToggleAutoPay = async (clientId: string, currentStatus: boolean) => {
     try {
-      await updateDoc(doc(db, 'clients', clientId), { autoPay: !currentStatus });
+      await patchApiData(`/v1/clients/${clientId}`, { autoPay: !currentStatus });
       toast.success(`Auto-pay ${!currentStatus ? 'enabled' : 'disabled'} for client`);
     } catch (err: any) {
       toast.error("Failed to update auto-pay status", { description: err.message });

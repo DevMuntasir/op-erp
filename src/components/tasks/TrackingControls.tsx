@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/src/App';
-import { listTasks } from '@/src/api/endpoints/tasks.api';
-import { listSessions, stopSession } from '@/src/api/endpoints/sessions.api';
+import { stopSession } from '@/src/api/endpoints/sessions.api';
+import { useTasks, useUserSessions } from '@/src/hooks/useApiQueries';
 import { uploadScreenshot } from '@/src/api/endpoints/screenshots.api';
-import { queryKeys } from '@/src/shared/constants/query-keys';
+import { queryKeys } from '@/src/shared/constants/query-keys';  // Still needed for invalidation
 import { Session, Task } from '@/src/types';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -131,18 +131,11 @@ export const TrackingControls = () => {
   const [isCapturing, setIsCapturing] = useState(false);
   const timerRef = useRef<number | null>(null);
   const screenshotTimeoutRef = useRef<number | null>(null);
+  const screenStreamRef = useRef<MediaStream | null>(null);
+  const screenVideoRef = useRef<HTMLVideoElement | null>(null);
 
-  const tasksQuery = useQuery({
-    queryKey: queryKeys.tasks({ assigned: 'me' }),
-    queryFn: listTasks,
-    enabled: !!user,
-  });
-
-  const sessionsQuery = useQuery({
-    queryKey: queryKeys.sessions({ scope: 'me' }),
-    queryFn: listSessions,
-    enabled: !!user,
-  });
+  const tasksQuery = useTasks();
+  const sessionsQuery = useUserSessions();
 
   const activeSession = useMemo<Session | null>(() => {
     if (!user) return null;
@@ -216,6 +209,29 @@ export const TrackingControls = () => {
     };
   }, [activeSession?.id]);
 
+  useEffect(() => {
+    if (!activeSession?.id) return;
+
+    const handleBeforeUnload = async () => {
+      stopScreenCapture();
+      if (activeSession?.id) {
+        try {
+          await stopSession({
+            sessionId: activeSession.id,
+            activeTimeSec: Math.max(activeSession.activeTime ?? 0, elapsedTime),
+          });
+        } catch (error) {
+          console.error('Failed to stop session on browser close:', error);
+        }
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [activeSession?.id, elapsedTime]);
+
   const startMutation = useMutation({
     mutationFn: async () => {
       const selectedTask = tasks.find((task) => task.id === selectedTaskId);
@@ -225,6 +241,7 @@ export const TrackingControls = () => {
       return startTaskWork(selectedTask, { activeSession });
     },
     onSuccess: async (result) => {
+      await initializeScreenCapture(result.session.id);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.tasks({ assigned: 'me' }) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.tasks({ dashboard: true }) }),
@@ -241,6 +258,7 @@ export const TrackingControls = () => {
   const stopMutation = useMutation({
     mutationFn: stopSession,
     onSuccess: () => {
+      stopScreenCapture();
       queryClient.invalidateQueries({ queryKey: queryKeys.sessions({ scope: 'me' }) });
       toast.success('Session ended');
     },
@@ -256,26 +274,104 @@ export const TrackingControls = () => {
     },
   });
 
+  const initializeScreenCapture = async (sessionId: string): Promise<boolean> => {
+    try {
+      if (screenStreamRef.current) return true;
+
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: { cursor: 'always' } as any,
+        audio: false,
+      });
+
+      screenStreamRef.current = stream;
+
+      const video = document.createElement('video');
+      video.srcObject = stream;
+      video.play();
+      screenVideoRef.current = video;
+
+      stream.getVideoTracks()[0].onended = async () => {
+        toast.info('Screen capture ended');
+        stopScreenCapture();
+        try {
+          await stopSession({
+            sessionId,
+            activeTimeSec: Math.max(activeSession?.activeTime ?? 0, elapsedTime),
+          });
+          await Promise.all([
+            queryClient.invalidateQueries({ queryKey: queryKeys.sessions({ scope: 'me' }) }),
+            queryClient.invalidateQueries({ queryKey: queryKeys.screenshots({ scope: 'me' }) }),
+          ]);
+        } catch (error) {
+          console.error('Failed to auto-stop session:', error);
+        }
+      };
+
+      return true;
+    } catch (error: any) {
+      if (error.name !== 'NotAllowedError') {
+        console.error('Desktop screenshot init error:', error);
+      }
+      return false;
+    }
+  };
+
+  const captureDesktopScreenshot = async (): Promise<string | null> => {
+    try {
+      if (!screenStreamRef.current || !screenVideoRef.current) {
+        return null;
+      }
+
+      const video = screenVideoRef.current;
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(video, 0, 0);
+      }
+
+      const imageBase64 = canvas.toDataURL('image/jpeg', 0.85);
+      return imageBase64;
+    } catch (error: any) {
+      console.error('Desktop screenshot capture error:', error);
+      return null;
+    }
+  };
+
+  const stopScreenCapture = () => {
+    if (screenStreamRef.current) {
+      screenStreamRef.current.getTracks().forEach(track => track.stop());
+      screenStreamRef.current = null;
+      screenVideoRef.current = null;
+    }
+  };
+
+  const captureApplicationScreenshot = async (): Promise<string> => {
+    const captureEl = document.getElementById('root') || document.body;
+    const canvas = await html2canvas(captureEl, {
+      scale: 1,
+      logging: false,
+      useCORS: true,
+      allowTaint: false,
+      proxy: window.location.origin + '/api/proxy-image',
+      backgroundColor: SAFE_CAPTURE_BG,
+      ignoreElements: (el) => el.classList.contains('tracking-controls-container') || el.classList.contains('tracking-controls-fixed'),
+      onclone: (clonedDoc) => {
+        sanitizeClonedDocument(clonedDoc);
+      },
+    });
+
+    return canvas.toDataURL('image/jpeg', 0.8);
+  };
+
   const captureScreenshot = async (sessionId: string) => {
     let imageBase64: string;
 
     try {
       setIsCapturing(true);
-      const captureEl = document.getElementById('root') || document.body;
-      const canvas = await html2canvas(captureEl, {
-        scale: 1,
-        logging: false,
-        useCORS: true,
-        allowTaint: false,
-        proxy: window.location.origin + '/api/proxy-image',
-        backgroundColor: SAFE_CAPTURE_BG,
-        ignoreElements: (el) => el.classList.contains('tracking-controls-container') || el.classList.contains('tracking-controls-fixed'),
-        onclone: (clonedDoc) => {
-          sanitizeClonedDocument(clonedDoc);
-        },
-      });
 
-      imageBase64 = canvas.toDataURL('image/jpeg', 0.8);
+      imageBase64 = await captureDesktopScreenshot() || await captureApplicationScreenshot();
     } catch (error: any) {
       toast.error('Screenshot capture failed', { description: error?.message || 'Unable to render screenshot.' });
       setIsCapturing(false);

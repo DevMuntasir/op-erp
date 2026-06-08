@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/src/App';
-import { doc, getDoc, collection, query, where, onSnapshot, orderBy, limit } from 'firebase/firestore';
-import { db } from '@/src/lib/firebase';
+import { useTasks, useUserSessions } from '@/src/hooks/useApiQueries';
+import { getApiData } from '@/src/api/client';
 import { isUserOnline, formatLastSeenHalifax, formatDateTimeHalifax } from '@/src/lib/presence';
 import { User, Task, Session } from '@/src/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -39,10 +39,9 @@ export const EmployeeDetail = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [employee, setEmployee] = useState<User | null>(null);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Fetch employee from API
   useEffect(() => {
     if (!employeeId || !user) {
       if (!employeeId) setLoading(false);
@@ -51,21 +50,18 @@ export const EmployeeDetail = () => {
 
     const fetchEmployee = async () => {
       try {
-        const docRef = doc(db, 'users', employeeId);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          const data = docSnap.data() as User;
+        const employees = await getApiData('/v1/employees/');
+        const foundEmployee = employees.find((e: any) => e.uid === employeeId);
+        if (foundEmployee) {
           // Security check: if admin, must be their employee
-          if (user.role === 'admin' && data.adminId !== user.uid) {
+          if (user.role === 'admin' && foundEmployee.adminId !== user.uid) {
             toast.error("Unauthorized access");
             navigate('/admin/employees');
             return;
           }
-          setEmployee({ uid: docSnap.id, ...data } as User);
-          setLoading(false);
-        } else {
-          setLoading(false);
+          setEmployee(foundEmployee as User);
         }
+        setLoading(false);
       } catch (error) {
         console.error("Error fetching employee:", error);
         setLoading(false);
@@ -73,59 +69,25 @@ export const EmployeeDetail = () => {
     };
 
     fetchEmployee();
+  }, [employeeId, user, navigate]);
 
-    // Real-time tasks for this employee - removed limit and orderBy to ensure all tasks show up
-    let qTasks;
-    if (user.role === 'admin') {
-      qTasks = query(
-        collection(db, 'tasks'),
-        where('adminId', '==', user.uid),
-        where('assignedTo', '==', employeeId)
-      );
-    } else {
-      qTasks = query(
-        collection(db, 'tasks'),
-        where('assignedTo', '==', employeeId)
-      );
-    }
-    
-    const unsubTasks = onSnapshot(qTasks, (snap) => {
-      const allTasks = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Task));
-      const sortedTasks = allTasks.sort((a, b) => {
-        const timeA = a.createdAt?.toMillis?.() || 0;
-        const timeB = b.createdAt?.toMillis?.() || 0;
-        return timeB - timeA;
-      });
-      setTasks(sortedTasks);
-    });
+  // Fetch tasks and sessions using React Query
+  const tasksQuery = useTasks();
+  const sessionsQuery = useUserSessions();
 
-    // Real-time sessions for this employee
-    let qSessions;
-    if (user.role === 'admin') {
-      qSessions = query(
-        collection(db, 'sessions'),
-        where('adminId', '==', user.uid),
-        where('userId', '==', employeeId),
-        orderBy('startTime', 'desc'),
-        limit(10)
-      );
-    } else {
-      qSessions = query(
-        collection(db, 'sessions'),
-        where('userId', '==', employeeId),
-        orderBy('startTime', 'desc'),
-        limit(10)
-      );
-    }
-    const unsubSessions = onSnapshot(qSessions, (snap) => {
-      setSessions(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Session)));
-    });
+  // Filter and sort tasks for this employee
+  const tasks = tasksQuery.data?.filter((t: Task) => t.assignedTo === employeeId).sort((a: Task, b: Task) => {
+    const timeA = new Date(a.createdAt).getTime() || 0;
+    const timeB = new Date(b.createdAt).getTime() || 0;
+    return timeB - timeA;
+  }) ?? [];
 
-    return () => {
-      unsubTasks();
-      unsubSessions();
-    };
-  }, [employeeId]);
+  // Filter and sort sessions for this employee (last 10)
+  const sessions = sessionsQuery.data?.filter((s: Session) => s.userId === employeeId).sort((a: Session, b: Session) => {
+    const timeA = new Date(a.startTime).getTime() || 0;
+    const timeB = new Date(b.startTime).getTime() || 0;
+    return timeB - timeA;
+  }).slice(0, 10) ?? [];
 
   if (loading) return <div className="p-8 text-center">Loading employee data...</div>;
   if (!employee) return <div className="p-8 text-center text-red-500">Employee not found.</div>;
