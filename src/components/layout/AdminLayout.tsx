@@ -93,7 +93,7 @@ const navItems = {
   client: [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/client' },
     { icon: CheckSquare, label: 'Tasks', path: '/client/tasks' },
-    
+    { icon: MessageSquare, label: 'Messages', path: '/client/messages' },
     { icon: Sparkles, label: 'Reports', path: '/client/reports' },
     { icon: CreditCard, label: 'Billing', path: '/client/billing' },
     { icon: UserIcon, label: 'Profile', path: '/client/profile' },

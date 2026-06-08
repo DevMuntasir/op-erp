@@ -115,6 +115,7 @@ function ClientArea() {
           <Route index element={<ClientPortal />} />
           <Route path="tasks" element={<TaskManagement />} />
           <Route path="tasks/:taskId" element={<TaskDetail />} />
+          <Route path="messages" element={<ChatSystem />} />
           <Route path="reports" element={<ReportsManagement />} />
           <Route path="billing" element={<BillingManagement />} />
           <Route path="profile" element={<ProfilePage />} />
