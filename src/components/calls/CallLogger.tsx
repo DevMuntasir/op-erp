@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
-import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
-import { db } from '@/src/lib/firebase';
 import { useAuth } from '@/src/App';
+import { createCall } from '@/src/api/endpoints/calls.api';
 import { Lead } from '@/src/types';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -41,19 +40,18 @@ export const CallLoggerDialog: React.FC<CallLoggerDialogProps> = ({ lead, onLogg
     setLoading(true);
     try {
       const adminId = user.role === 'admin' ? user.uid : (user.adminId || user.uid);
-      
-      await addDoc(collection(db, 'calls'), {
+
+      await createCall({
         employeeId: user.uid,
         employeeName: user.name || user.email,
         adminId: adminId,
         leadId: lead?.id || null,
         leadName: lead?.name || null,
-        phoneNumber,
+        contactPhone: phoneNumber,
         type,
         status,
-        duration: parseInt(duration) || 0,
+        durationSec: parseInt(duration) || 0,
         notes,
-        timestamp: new Date().toISOString(),
       });
 
       toast.success("Call logged successfully");
