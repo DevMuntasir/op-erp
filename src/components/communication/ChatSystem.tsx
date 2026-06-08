@@ -37,7 +37,7 @@ const formatRelativeTime = (dateInput?: string | null): string => {
   return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
 };
 
-export const ChatSystem = () => {
+const ChatSystemComponent = () => {
   const { user } = useAuth();
   const [contactsResponse, setContactsResponse] = useState<{ contacts: Contact[]; groups: Record<string, Contact[]> } | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -708,3 +708,5 @@ export const ChatSystem = () => {
     </div>
   );
 };
+
+export const ChatSystem = React.memo(ChatSystemComponent);

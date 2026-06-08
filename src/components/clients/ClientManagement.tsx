@@ -97,7 +97,7 @@ const getAdminLabel = (adminId: string, currentUser: User | null) => {
   return adminId.length > 12 ? `${adminId.slice(0, 6)}...${adminId.slice(-4)}` : adminId;
 };
 
-export const ClientManagement = () => {
+const ClientManagementComponent = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [isAdding, setIsAdding] = useState(false);
@@ -680,3 +680,5 @@ export const ClientManagement = () => {
     </div>
   );
 };
+
+export const ClientManagement = React.memo(ClientManagementComponent);

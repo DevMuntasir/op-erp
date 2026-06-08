@@ -89,7 +89,7 @@ const resetTaskForm = (
   setSelectedProjectId('');
 };
 
-export const TaskManagement = () => {
+const TaskManagementComponent = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -1016,3 +1016,5 @@ export const TaskManagement = () => {
     </div>
   );
 };
+
+export const TaskManagement = React.memo(TaskManagementComponent);
