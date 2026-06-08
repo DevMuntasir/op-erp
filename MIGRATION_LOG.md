@@ -2,7 +2,7 @@
 
 **Date Started**: 2026-06-08  
 **Status**: In Progress  
-**Progress**: 1/8 components completed
+**Progress**: 2/8 components completed (25%)
 
 ---
 
@@ -88,9 +88,72 @@ npm run type-check -- src/components/calls/CallLogger.tsx
 
 ---
 
+## ✅ Completed Migrations (continued)
+
+### 2. TrackingControls.tsx (10 minutes) ✅ DONE
+
+**Completion Time**: 10 minutes  
+**Difficulty**: Easy  
+**Risk Level**: Low  
+**Status**: ✅ MIGRATED
+
+#### Changes Made:
+
+**Before**:
+```typescript
+import { useQuery } from '@tanstack/react-query';
+import { listTasks } from '@/src/api/endpoints/tasks.api';
+import { listSessions } from '@/src/api/endpoints/sessions.api';
+
+const tasksQuery = useQuery({
+  queryKey: queryKeys.tasks({ assigned: 'me' }),
+  queryFn: listTasks,
+  enabled: !!user,
+});
+
+const sessionsQuery = useQuery({
+  queryKey: queryKeys.sessions({ scope: 'me' }),
+  queryFn: listSessions,
+  enabled: !!user,
+});
+```
+
+**After**:
+```typescript
+import { useTasks, useUserSessions } from '@/src/hooks/useApiQueries';
+
+const tasksQuery = useTasks();
+const sessionsQuery = useUserSessions();
+```
+
+#### Key Changes:
+- ✅ Replaced manual `useQuery` setup with shared hooks
+- ✅ Removed redundant query configuration
+- ✅ Removed unused `listTasks` import
+- ✅ Hooks handle all caching/refetching automatically
+
+#### Benefits:
+- 🎉 Shared cache with other components
+- 🎉 Cleaner code (2 lines instead of 16)
+- 🎉 Better performance (automatic background refetch)
+- 🎉 Consistent configuration across app
+
+#### Testing Checklist:
+- [ ] Component renders without errors
+- [ ] Task dropdown works and shows assigned tasks
+- [ ] Start tracking works properly
+- [ ] Timer increments correctly
+- [ ] Active session status shows correctly
+- [ ] Screenshots still auto-capture every 15s
+- [ ] Manual screenshot capture works
+- [ ] Stop session works
+- [ ] No console errors
+
+---
+
 ## 📋 Remaining Migrations
 
-### 2. TrackingControls.tsx (1 hour) ⏳ TODO
+### 3. BillingManagement.tsx (3 hours) ⏳ TODO
 
 **Difficulty**: Easy  
 **Risk Level**: Low  
@@ -148,10 +211,10 @@ npm run type-check -- src/components/calls/CallLogger.tsx
 ## 📊 Progress Summary
 
 ```
-Completed:    ████░░░░░░░░░░░░░░░░░░ 1/8 (12.5%)
+Completed:    ████████░░░░░░░░░░░░░░░░ 2/8 (25%)
 Estimated:    2 weeks of work, 12-16 hours total
-Time Invested: 30 minutes
-Time Remaining: 11-15.5 hours
+Time Invested: 40 minutes
+Time Remaining: 11.5-15.5 hours
 ```
 
 ### Impact So Far:
@@ -167,10 +230,10 @@ Time Remaining: 11-15.5 hours
 
 ## 🎯 Strategy Going Forward
 
-### Phase 1: Quick Wins (Done + Next 2 hours)
+### Phase 1: Quick Wins (DONE!)
 - ✅ CallLogger (30 min) - COMPLETE
-- ⏳ TrackingControls (1 hour) - NEXT
-- ⏳ Quick testing (30 min)
+- ✅ TrackingControls (10 min) - COMPLETE
+- ⏳ Quick testing (if needed)
 
 ### Phase 2: Big Impact (3+ hours)
 - ⏳ BillingManagement (3 hours) - HIGHEST PRIORITY
@@ -187,11 +250,20 @@ Time Remaining: 11-15.5 hours
 
 ## 🚀 Next Step
 
-Ready to do **TrackingControls** next? It's also easy and will unlock session tracking improvements.
+🎉 **Quick wins complete!** Both CallLogger and TrackingControls are migrated.
 
-**Estimated time**: 1 hour  
-**Difficulty**: Easy  
-**Impact**: Medium (session tracking quota freed up)
+### Ready for the Big One?
+
+**BillingManagement.tsx** - The most impactful migration
+- **Estimated time**: 3 hours
+- **Difficulty**: Medium
+- **Impact**: HUGE ($800/month savings!)
+- **Complexity**: onSnapshot listeners + addDoc writes
+- **What it fixes**: Real-time quota drain + unvalidated writes
+
+**Worth it? YES!** One component saves 80% of Firestore costs.
+
+Want to go for it? 🚀
 
 ---
 

@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/src/App';
-import { listTasks } from '@/src/api/endpoints/tasks.api';
-import { listSessions, stopSession } from '@/src/api/endpoints/sessions.api';
+import { stopSession } from '@/src/api/endpoints/sessions.api';
+import { useTasks, useUserSessions } from '@/src/hooks/useApiQueries';
 import { uploadScreenshot } from '@/src/api/endpoints/screenshots.api';
-import { queryKeys } from '@/src/shared/constants/query-keys';
+import { queryKeys } from '@/src/shared/constants/query-keys';  // Still needed for invalidation
 import { Session, Task } from '@/src/types';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -132,17 +132,8 @@ export const TrackingControls = () => {
   const timerRef = useRef<number | null>(null);
   const screenshotTimeoutRef = useRef<number | null>(null);
 
-  const tasksQuery = useQuery({
-    queryKey: queryKeys.tasks({ assigned: 'me' }),
-    queryFn: listTasks,
-    enabled: !!user,
-  });
-
-  const sessionsQuery = useQuery({
-    queryKey: queryKeys.sessions({ scope: 'me' }),
-    queryFn: listSessions,
-    enabled: !!user,
-  });
+  const tasksQuery = useTasks();
+  const sessionsQuery = useUserSessions();
 
   const activeSession = useMemo<Session | null>(() => {
     if (!user) return null;
