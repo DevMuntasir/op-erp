@@ -50,21 +50,10 @@ import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import { generateClientReport } from '@/src/services/geminiService';
 import { cn } from '@/lib/utils';
-import { auth, db } from '@/src/lib/firebase';
-import { handleFirestoreError, OperationType } from '@/src/lib/firestore-errors';
-import { 
-  collection, 
-  addDoc, 
-  updateDoc,
-  query, 
-  where, 
-  onSnapshot, 
-  orderBy, 
-  serverTimestamp,
-  doc,
-  getDoc,
-  getDocs
-} from 'firebase/firestore';
+import { useAuth } from '@/src/App';
+import { useReports, useClients } from '@/src/hooks/useApiQueries';
+import { postApiData, patchApiData } from '@/src/api/client';
+import { listEmployees } from '@/src/api/endpoints/employees.api';
 
 interface ImageFile {
   id: string;
@@ -96,6 +85,7 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
 export const ReportGenerator: React.FC = () => {
+  const { user } = useAuth();
   const [clientName, setClientName] = useState('');
   const [projectName, setProjectName] = useState('');
   const [reportingPeriod, setReportingPeriod] = useState('');
@@ -123,23 +113,17 @@ export const ReportGenerator: React.FC = () => {
 
   const [selectedImageView, setSelectedImageView] = useState<string | null>(null);
 
-  // Fetch user data for adminId
+  // Set user data from useAuth hook
   useEffect(() => {
-    if (!auth.currentUser) return;
-
-    const fetchUser = async () => {
-      const userRef = doc(db, 'users', auth.currentUser!.uid);
-      const userSnap = await getDoc(userRef);
-      if (userSnap.exists()) {
-        const data = userSnap.data();
-        setUserData({
-          ...data,
-          uid: data.uid || auth.currentUser!.uid // Ensure UID is present
-        });
-      }
-    };
-    fetchUser();
-  }, []);
+    if (user) {
+      setUserData({
+        ...user,
+        uid: user.uid,
+        role: user.role,
+        adminId: user.adminId
+      });
+    }
+  }, [user]);
 
   // Fullscreen ImageViewer Modal
   const ImageViewer = () => (
@@ -204,70 +188,32 @@ export const ReportGenerator: React.FC = () => {
     </Dialog>
   );
 
-  // Fetch report history
+  // Fetch report history using React Query
+  const reportsQuery = useReports();
+
   useEffect(() => {
-    if (!auth.currentUser || !userData) return;
-
-    const reportsRef = collection(db, 'reports');
-    // Staff see their own reports, admins see all reports for their agency
-    // We remove orderBy here to avoid composite index requirement in dev
-    const q = userData.role === 'employee' 
-      ? query(reportsRef, where('createdBy', '==', auth.currentUser.uid))
-      : query(reportsRef, where('adminId', '==', userData.uid || auth.currentUser.uid));
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const reports = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as ReportData[];
-      
-      // Sort in memory to avoid index requirements
-      const sortedReports = reports.sort((a, b) => {
-        const dateA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
-        const dateB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
+    if (reportsQuery.data) {
+      const sortedReports = (reportsQuery.data as ReportData[]).sort((a, b) => {
+        const dateA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : new Date(a.createdAt).getTime();
+        const dateB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : new Date(b.createdAt).getTime();
         return dateB - dateA;
       });
-
       setPastReports(sortedReports);
       setLoadingHistory(false);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.GET, 'reports');
-      setLoadingHistory(false);
-    });
-
-    return () => unsubscribe();
-  }, [userData]);
-
-  // Fetch available clients
-  useEffect(() => {
-    if (!auth.currentUser || !userData) return;
-
-    setLoadingClients(true);
-    const clientsRef = collection(db, 'clients');
-    const adminId = userData.role === 'employee' ? userData.adminId : (userData.uid || auth.currentUser.uid);
-    
-    if (!adminId) {
-      setLoadingClients(false);
-      return;
     }
+  }, [reportsQuery.data]);
 
-    const q = query(clientsRef, where('adminId', '==', adminId));
+  // Fetch available clients using React Query
+  const clientsQuery = useClients();
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const clients = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      setAvailableClients(clients);
+  useEffect(() => {
+    if (clientsQuery.data) {
+      setAvailableClients(clientsQuery.data);
       setLoadingClients(false);
-    }, (error) => {
-      console.error("Firestore clients error:", error);
-      handleFirestoreError(error, OperationType.LIST, 'clients');
-      setLoadingClients(false);
-    });
-
-    return () => unsubscribe();
-  }, [userData]);
+    } else if (clientsQuery.isLoading) {
+      setLoadingClients(true);
+    }
+  }, [clientsQuery.data, clientsQuery.isLoading]);
 
   const compressImage = (file: File): Promise<{ base64: string, preview: string }> => {
     return new Promise((resolve) => {
@@ -487,66 +433,31 @@ export const ReportGenerator: React.FC = () => {
 
       try {
         let finalReportId = editingReportId;
+        const adminId = userData.role === 'employee' ? userData.adminId : (userData.uid);
+
+        const reportPayload = {
+          ...reportData,
+          adminId,
+          updatedAt: new Date().toISOString(),
+          ...(editingReportId ? {} : { createdAt: new Date().toISOString() })
+        };
+
         if (editingReportId) {
-          await updateDoc(doc(db, 'reports', editingReportId), reportData);
+          await patchApiData(`/v1/reports/${editingReportId}`, reportPayload);
         } else {
-          const docRef = await addDoc(collection(db, 'reports'), reportData);
-          finalReportId = docRef.id;
+          const response = await postApiData('/v1/reports/', reportPayload);
+          finalReportId = response.id || editingReportId;
         }
-        
-        // INTERNAL DELIVERY SYSTEM: Create Notification
-        if (reportData.sentToClient && reportData.clientEmail) {
-          const normalizedEmail = reportData.clientEmail.toLowerCase().trim();
-          const qAdminId = userData.role === 'employee' ? userData.adminId : (userData.uid || auth.currentUser.uid);
-          
-          // Query users with both email and adminId to satisfy security rules
-          const clientsQuery = query(
-            collection(db, 'users'), 
-            where('email', '==', normalizedEmail),
-            where('adminId', '==', qAdminId)
-          );
-          
-          const clientSnap = await getDocs(clientsQuery);
-          if (!clientSnap.empty) {
-            const clientUid = clientSnap.docs[0].id;
-            await addDoc(collection(db, 'notifications'), {
-              userId: clientUid,
-              title: "New Report Delivered",
-              message: `A new report for project "${reportData.projectName}" is available in your portal.`,
-              type: "report",
-              relatedId: finalReportId,
-              read: false,
-              adminId: qAdminId,
-              createdAt: serverTimestamp()
-            });
-          }
-          
-          // Call Server Delivery API for Email/Logs
-          if (normalizedEmail) {
-            try {
-              await fetch('/api/deliver-report', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  reportId: finalReportId,
-                  clientEmail: normalizedEmail,
-                  clientName: reportData.clientName,
-                  projectName: reportData.projectName
-                })
-              });
-            } catch (e) {
-              console.warn("Delivery API call failed during auto-delivery");
-            }
-          }
-        }
-        
+
+        // Server handles notification and delivery automatically via API
         if (targetClient) {
           toast.success(`Report delivered to client portal (${targetClient.email})`);
         } else {
           toast.success(editingReportId ? 'Report updated!' : 'Report generated!');
         }
       } catch (error) {
-        handleFirestoreError(error, OperationType.WRITE, 'reports');
+        console.error('Failed to save report:', error);
+        toast.error('Failed to save report');
       }
 
       setReport(result);
