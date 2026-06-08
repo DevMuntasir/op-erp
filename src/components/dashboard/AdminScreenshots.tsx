@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/src/App';
 import { Screenshot, User } from '@/src/types';
 import { listEmployees } from '@/src/api/endpoints/employees.api';
+import { listScreenshots } from '@/src/api/endpoints/screenshots.api';
+import { listAdmins } from '@/src/api/endpoints/admins.api';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -29,9 +31,7 @@ export const AdminScreenshots = () => {
 
     const fetchAdmins = async () => {
       try {
-        const response = await fetch('/v1/admin/admins/');
-        if (!response.ok) throw new Error('Failed to fetch admins');
-        const data = await response.json();
+        const data = await listAdmins();
         setAdmins(data);
       } catch (error) {
         console.error("AdminScreenshots fetchAdmins error:", error);
@@ -64,17 +64,8 @@ export const AdminScreenshots = () => {
       try {
         setLoading(true);
 
-        const screensResponse = await fetch('/v1/screenshots/');
-
-        if (!screensResponse.ok) {
-          const errorText = await screensResponse.text();
-          console.error('Failed to fetch screenshots:', screensResponse.status, errorText);
-          setScreenshots([]);
-          return;
-        }
-
-        let screensData = await screensResponse.json();
-        console.log('All screenshots fetched:', screensData);
+        let screensData = await listScreenshots();
+        console.log('Screenshots fetched:', screensData);
 
         // Filter by selected employee
         if (selectedEmployeeId) {
@@ -86,6 +77,7 @@ export const AdminScreenshots = () => {
         setLoading(false);
       } catch (error) {
         console.error("AdminScreenshots fetchScreenshots error:", error);
+        setScreenshots([]);
         setLoading(false);
       }
     };
@@ -141,7 +133,9 @@ export const AdminScreenshots = () => {
                 <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest text-left">Employee Filter</span>
                 <Select value={selectedEmployeeId} onValueChange={(value) => setSelectedEmployeeId(value || '')}>
                   <SelectTrigger className="h-8 border-none bg-transparent p-0 w-[200px] font-bold focus:ring-0">
-                    <SelectValue placeholder="All Employees" />
+                    <SelectValue placeholder="All Employees">
+                      {selectedEmployeeId && users.find(u => u.uid === selectedEmployeeId)?.name}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="">All Employees</SelectItem>
@@ -253,22 +247,7 @@ export const AdminScreenshots = () => {
 
                     <div className="hidden sm:block h-12 w-px bg-white/10" />
 
-                    <div className="flex gap-2 sm:gap-4 w-full sm:w-auto">
-                      <Button 
-                        variant="outline" 
-                        className="flex-1 sm:flex-initial rounded-xl sm:rounded-2xl border-white/10 text-white hover:bg-white/10 font-bold h-10 sm:h-14 px-4 sm:px-8 text-[10px] sm:text-sm"
-                        onClick={() => window.open(selectedScreenshot.storagePath, '_blank')}
-                      >
-                        <Eye className="w-4 h-4 mr-2" />
-                        Original
-                      </Button>
-                      <Button 
-                        className="flex-1 sm:flex-initial rounded-xl sm:rounded-2xl bg-white text-zinc-900 hover:bg-zinc-100 font-extrabold h-10 sm:h-14 px-6 sm:px-10 text-[10px] sm:text-sm"
-                        onClick={() => setSelectedScreenshot(null)}
-                      >
-                        Close
-                      </Button>
-                    </div>
+                    
                   </div>
                 </div>
               </div>
