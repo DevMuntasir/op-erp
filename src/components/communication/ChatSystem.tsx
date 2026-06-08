@@ -20,6 +20,11 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Send, Paperclip, ChevronLeft, MessageSquare, Check, CheckCheck, Phone, Trash2, Search, Edit as EditIcon } from 'lucide-react';
 import { toast } from 'sonner';
 
+// Polling configuration from environment variables
+const POLLING_ENABLED = import.meta.env.VITE_POLLING_ENABLED !== 'false';
+const POLLING_INTERVAL_MESSAGES = parseInt(import.meta.env.VITE_POLLING_INTERVAL_MESSAGES || '3000', 10);
+const POLLING_INTERVAL_CONVERSATIONS = parseInt(import.meta.env.VITE_POLLING_INTERVAL_CONVERSATIONS || '5000', 10);
+
 // Messenger-style compact relative time (e.g. "now", "5m", "3h", "2d", "Jun 1")
 const formatRelativeTime = (dateInput?: string | null): string => {
   if (!dateInput) return '';
@@ -60,27 +65,60 @@ const ChatSystemComponent = () => {
   // Keep ref in sync with state on every render (synchronous, before effects)
   activeConversationRef.current = activeConversation;
 
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
   const { sendTyping } = useWebSocket({
     onMessageNew: (event) => {
       try {
-        // Normalise: backend may send message fields inline or nested under event.message
-        const raw = event.message || event;
+        console.log('[Chat] onMessageNew called with:', event);
+
+        // Normalise: backend may send message in different nested structures
+        // Try multiple possible paths: event.message, event.data.message, or direct properties
+        let raw = event;
+
+        if (event.message && typeof event.message === 'object') {
+          raw = event.message;
+        } else if (event.data && typeof event.data === 'object') {
+          if (event.data.message) {
+            raw = event.data.message;
+          } else {
+            raw = event.data;
+          }
+        }
+
+        console.log('[Chat] Normalized message:', raw);
+
+        // Validate required fields
+        if (!raw.id || !raw.conversationId || !raw.senderId) {
+          console.warn('[Chat] Invalid message structure, missing required fields:', raw);
+          return;
+        }
+
         const newMsg: Message = {
           id: raw.id,
           conversationId: raw.conversationId,
           senderId: raw.senderId,
-          content: raw.content,
+          content: raw.content || '',
           fileUrl: raw.fileUrl || null,
           deletedAt: raw.isDeleted ? raw.createdAt : null,
-          createdAt: raw.createdAt,
+          createdAt: raw.createdAt || new Date().toISOString(),
           readBy: raw.readBy || [],
         };
+
+        console.log('[Chat] Processing message:', newMsg);
 
         // Use ref to avoid stale closure
         const current = activeConversationRef.current;
         if (current && newMsg.conversationId === current.id) {
           console.log('[Chat] New message in active thread:', newMsg);
-          setMessages(prev => [...prev, newMsg]);
+          setMessages(prev => {
+            // Prevent duplicates
+            if (prev.some(m => m.id === newMsg.id)) {
+              console.log('[Chat] Duplicate message, skipping');
+              return prev;
+            }
+            return [...prev, newMsg];
+          });
         } else if (newMsg.conversationId) {
           console.log('[Chat] New message in background conversation:', newMsg.conversationId);
           setConversations(prev =>
@@ -130,13 +168,13 @@ const ChatSystemComponent = () => {
       }
     },
     onError: (error) => {
-      console.log('[Chat] WebSocket unavailable - using REST API only:', error.message);
+      console.log('[Chat] WebSocket unavailable - using polling fallback:', error.message);
     },
     onConnect: () => {
-      console.log('[Chat] WebSocket connected');
+      console.log('[Chat] WebSocket connected - polling provides additional safety');
     },
     onDisconnect: () => {
-      console.log('[Chat] WebSocket disconnected');
+      console.log('[Chat] WebSocket disconnected - polling continues to receive messages');
     }
   });
 
@@ -171,20 +209,35 @@ const ChatSystemComponent = () => {
     }
   }, []);
 
-  const loadMessages = useCallback(async (conversationId: string, cursor?: string) => {
+  const loadMessages = useCallback(async (conversationId: string, cursor?: string, isPolling = false) => {
     try {
-      setMessagesLoading(true);
+      if (!isPolling) setMessagesLoading(true);
       const data = await getMessages(conversationId, 50, cursor);
       // Messenger-style order: oldest at top, newest at bottom.
       // The API returns newest-first, so always sort ascending by createdAt.
       const sortAsc = (arr: Message[]) =>
         [...arr].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-      setMessages(prev => sortAsc(cursor ? [...data, ...prev] : data));
+
+      if (cursor) {
+        setMessages(prev => sortAsc([...data, ...prev]));
+      } else if (isPolling) {
+        // When polling, only add new messages that aren't already in state
+        setMessages(prev => {
+          const newMessages = data.filter(
+            msg => !prev.some(existing => existing.id === msg.id)
+          );
+          if (newMessages.length === 0) return prev;
+          return sortAsc([...prev, ...newMessages]);
+        });
+      } else {
+        // Initial load
+        setMessages(sortAsc(data));
+      }
     } catch (error) {
       console.error('Failed to load messages:', error);
-      toast.error('Failed to load messages');
+      if (!isPolling) toast.error('Failed to load messages');
     } finally {
-      setMessagesLoading(false);
+      if (!isPolling) setMessagesLoading(false);
     }
   }, []);
 
@@ -193,19 +246,27 @@ const ChatSystemComponent = () => {
     loadConversations();
     setLoading(false);
 
-    // Fallback polling for conversations if WebSocket is unavailable
-    // Disable polling since WebSocket is now connected
-    // const pollInterval = setInterval(() => {
-    //   loadConversations();
-    // }, 30000);
+    // Enable polling for conversations if configured
+    if (!POLLING_ENABLED) {
+      console.log('[Chat] Polling disabled via VITE_POLLING_ENABLED');
+      return () => {};
+    }
 
-    // return () => clearInterval(pollInterval);
-    return () => {};
+    console.log('[Chat] Starting conversations polling (interval:', POLLING_INTERVAL_CONVERSATIONS, 'ms)');
+    const conversationsPolling = setInterval(() => {
+      loadConversations();
+    }, POLLING_INTERVAL_CONVERSATIONS);
+
+    return () => clearInterval(conversationsPolling);
   }, [loadContacts, loadConversations]);
 
   useEffect(() => {
     if (!activeConversation) {
       setMessages([]);
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
       return;
     }
 
@@ -214,14 +275,30 @@ const ChatSystemComponent = () => {
       console.error('Failed to mark conversation read:', err)
     );
 
-    // Fallback polling for messages if WebSocket is unavailable
-    // Disable polling since WebSocket is now connected
-    // const pollInterval = setInterval(() => {
-    //   loadMessages(activeConversation.id);
-    // }, 5000);
+    // Enable polling as a fallback, even when WebSocket is connected (if configured)
+    // This ensures messages are received even if WebSocket fails temporarily
+    if (POLLING_ENABLED) {
+      const setupPolling = () => {
+        if (pollIntervalRef.current) {
+          clearInterval(pollIntervalRef.current);
+        }
+        console.log('[Chat] Starting message polling for conversation:', activeConversation.id, '(interval:', POLLING_INTERVAL_MESSAGES, 'ms)');
+        pollIntervalRef.current = setInterval(() => {
+          loadMessages(activeConversation.id, undefined, true);
+        }, POLLING_INTERVAL_MESSAGES);
+      };
 
-    // return () => clearInterval(pollInterval);
-    return () => {};
+      setupPolling();
+    } else {
+      console.log('[Chat] Message polling disabled via VITE_POLLING_ENABLED');
+    }
+
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+    };
   }, [activeConversation, loadMessages]);
 
   useEffect(() => {

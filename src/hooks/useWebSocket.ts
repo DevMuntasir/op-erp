@@ -84,24 +84,46 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
         ws.onmessage = (event) => {
           try {
             const data = JSON.parse(event.data) as WebSocketEvent;
-            console.log('[WebSocket] Received event:', data.type, data);
+            // Backend may send type as 'type' field or 'event' field
+            const eventType = data.type || data.event || '';
+            console.log('[WebSocket] Received event:', eventType, data);
 
-            switch (data.type) {
+            switch (eventType) {
               case 'message:new':
-                console.log('[WebSocket] Dispatching onMessageNew');
-                callbacksRef.current.onMessageNew?.(data);
+              case 'message_new':
+                console.log('[WebSocket] Dispatching onMessageNew with data:', data);
+                // Normalize message data - backend may send it in data.message or data.data.message
+                const messagePayload = data.data?.message || data.message || data.data || data;
+                callbacksRef.current.onMessageNew?.(messagePayload);
                 break;
               case 'message:read':
-                callbacksRef.current.onMessageRead?.(data);
+              case 'message_read':
+                console.log('[WebSocket] Dispatching onMessageRead with data:', data);
+                const readPayload = data.data || data;
+                callbacksRef.current.onMessageRead?.(readPayload);
                 break;
               case 'presence:online':
+              case 'presence_online':
+                console.log('[WebSocket] Dispatching onPresenceChange (online) with data:', data);
+                callbacksRef.current.onPresenceChange?.({ ...data, type: 'presence:online' });
+                break;
               case 'presence:offline':
-                callbacksRef.current.onPresenceChange?.(data);
+              case 'presence_offline':
+                console.log('[WebSocket] Dispatching onPresenceChange (offline) with data:', data);
+                callbacksRef.current.onPresenceChange?.({ ...data, type: 'presence:offline' });
                 break;
               case 'typing:start':
-              case 'typing:stop':
-                callbacksRef.current.onTyping?.(data);
+              case 'typing_start':
+                console.log('[WebSocket] Dispatching onTyping (start) with data:', data);
+                callbacksRef.current.onTyping?.({ ...data, type: 'typing:start' });
                 break;
+              case 'typing:stop':
+              case 'typing_stop':
+                console.log('[WebSocket] Dispatching onTyping (stop) with data:', data);
+                callbacksRef.current.onTyping?.({ ...data, type: 'typing:stop' });
+                break;
+              default:
+                console.debug('[WebSocket] Unknown event type:', eventType, 'Full data:', data);
             }
           } catch (error) {
             console.error('[WebSocket] Parse error:', error);
