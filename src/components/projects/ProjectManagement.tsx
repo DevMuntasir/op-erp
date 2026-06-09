@@ -153,7 +153,7 @@ export const ProjectManagement = () => {
   const [nextEditStep, setNextEditStep] = useState<EditStep | null>(null);
 
   const projectsQuery = useQuery({
-    queryKey: queryKeys.projects({ scope: user?.role ?? 'anonymous' }),
+    queryKey: queryKeys.projects(),
     queryFn: listProjects,
     enabled: !!user,
   });
@@ -195,7 +195,7 @@ export const ProjectManagement = () => {
   const updateMutation = useMutation({
     mutationFn: ({ id, body }: { id: string; body: UpdateProjectRequest }) => updateProject(id, body),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.projects({ scope: user?.role ?? 'anonymous' }) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.projects() });
       toast.success('Project updated successfully');
       if (nextEditStep) {
         setEditStep(nextEditStep);
@@ -212,7 +212,7 @@ export const ProjectManagement = () => {
   const deleteMutation = useMutation({
     mutationFn: deleteProject,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.projects({ scope: user?.role ?? 'anonymous' }) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.projects() });
       toast.success('Project deleted successfully');
       setDeletingProject(null);
     },
@@ -236,7 +236,7 @@ export const ProjectManagement = () => {
   const createTaskMutation = useMutation({
     mutationFn: (taskData: Parameters<typeof createTask>[0]) => createTask(taskData),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.tasks({}) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tasks() });
       queryClient.invalidateQueries({ queryKey: ['edit-project-details', editingProject?.id] });
       toast.success('Task created successfully');
       resetForm();

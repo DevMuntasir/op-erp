@@ -243,10 +243,8 @@ export const TrackingControls = () => {
     onSuccess: async (result) => {
       await initializeScreenCapture(result.session.id);
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.tasks({ assigned: 'me' }) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.tasks({ dashboard: true }) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.tasks() }),
         queryClient.invalidateQueries({ queryKey: queryKeys.sessions({ scope: 'me' }) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.sessions({ dashboard: true }) }),
       ]);
       toast.success(result.sessionStarted ? 'Task started and tracking enabled' : 'Tracking is already active for this task');
     },
@@ -270,7 +268,7 @@ export const TrackingControls = () => {
   const screenshotMutation = useMutation({
     mutationFn: uploadScreenshot,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.screenshots({ scope: 'me' }) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.screenshots() });
     },
   });
 

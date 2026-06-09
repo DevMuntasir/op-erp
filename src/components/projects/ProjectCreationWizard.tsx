@@ -109,6 +109,7 @@ export const ProjectCreationWizard: React.FC<ProjectCreationWizardProps> = ({ op
   const createProjectMutation = useMutation({
     mutationFn: (body: CreateProjectRequest) => createProject(body),
     onSuccess: (project) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.projects() });
       setCreatedProjectId(project.id);
       setCurrentStep('client');
       toast.success('Project created successfully');
@@ -132,7 +133,7 @@ export const ProjectCreationWizard: React.FC<ProjectCreationWizardProps> = ({ op
   const createTaskMutation = useMutation({
     mutationFn: (taskData: Parameters<typeof createTask>[0]) => createTask(taskData),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.tasks({}) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tasks() });
       toast.success('Task created successfully');
       handleClose();
     },
