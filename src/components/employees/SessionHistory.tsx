@@ -4,50 +4,20 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { ImageIcon, User as UserIcon, Briefcase } from 'lucide-react';
-
-interface EmployeeScreenshot {
-  uid: string;
-  name: string;
-  email: string;
-  count: number;
-}
-
-interface TaskScreenshot {
-  taskId: string;
-  taskTitle: string;
-  count: number;
-}
-
-interface ScreenshotStats {
-  success: boolean;
-  data: {
-    totalScreenshots: number;
-    byEmployee: EmployeeScreenshot[];
-    byTask: TaskScreenshot[];
-  };
-  meta: {
-    requestId: string;
-  };
-}
+import { fetchScreenshotStats, ScreenshotStatsData } from '@/src/services/screenshotService';
 
 export const SessionHistory = () => {
   const { user } = useAuth();
-  const [stats, setStats] = useState<ScreenshotStats | null>(null);
+  const [stats, setStats] = useState<ScreenshotStatsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchScreenshotStats = async () => {
+    const loadScreenshotStats = async () => {
       try {
         setLoading(true);
         setError(null);
-        const response = await fetch('/v1/screenshots/stats');
-
-        if (!response.ok) {
-          throw new Error(`Failed to fetch screenshot stats: ${response.statusText}`);
-        }
-
-        const data: ScreenshotStats = await response.json();
+        const data = await fetchScreenshotStats();
         setStats(data);
       } catch (err) {
         console.error('Error fetching screenshot stats:', err);
@@ -58,7 +28,7 @@ export const SessionHistory = () => {
     };
 
     if (user) {
-      fetchScreenshotStats();
+      loadScreenshotStats();
     }
   }, [user]);
 
@@ -91,7 +61,7 @@ export const SessionHistory = () => {
             <ImageIcon className="w-12 h-12 text-zinc-200 mb-4 animate-pulse" />
             <p className="text-zinc-500 font-medium">Loading screenshot statistics...</p>
           </Card>
-        ) : stats && stats.data ? (
+        ) : stats ? (
           <div className="space-y-10">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <Card className="border-zinc-200 bg-gradient-to-br from-emerald-50 to-white">
@@ -99,7 +69,7 @@ export const SessionHistory = () => {
                   <CardTitle className="text-sm font-semibold text-zinc-600">Total Screenshots</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-4xl font-black text-emerald-600">{stats.data.totalScreenshots}</p>
+                  <p className="text-4xl font-black text-emerald-600">{stats.totalScreenshots}</p>
                 </CardContent>
               </Card>
               <Card className="border-zinc-200 bg-gradient-to-br from-blue-50 to-white">
@@ -107,7 +77,7 @@ export const SessionHistory = () => {
                   <CardTitle className="text-sm font-semibold text-zinc-600">Active Employees</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-4xl font-black text-blue-600">{stats.data.byEmployee.length}</p>
+                  <p className="text-4xl font-black text-blue-600">{stats.byEmployee.length}</p>
                 </CardContent>
               </Card>
               <Card className="border-zinc-200 bg-gradient-to-br from-purple-50 to-white">
@@ -115,12 +85,12 @@ export const SessionHistory = () => {
                   <CardTitle className="text-sm font-semibold text-zinc-600">Associated Tasks</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-4xl font-black text-purple-600">{stats.data.byTask.length}</p>
+                  <p className="text-4xl font-black text-purple-600">{stats.byTask.length}</p>
                 </CardContent>
               </Card>
             </div>
 
-            {stats.data.byEmployee.length > 0 && (
+            {stats.byEmployee.length > 0 && (
               <div className="space-y-3">
                 <div className="flex items-center gap-2">
                   <UserIcon className="w-4 h-4 text-zinc-400" />
@@ -136,7 +106,7 @@ export const SessionHistory = () => {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {stats.data.byEmployee.map((employee) => (
+                      {stats.byEmployee.map((employee) => (
                         <TableRow key={employee.uid} className="group transition-colors hover:bg-zinc-50/50">
                           <TableCell className="font-medium text-zinc-900">
                             {employee.name}
@@ -157,7 +127,7 @@ export const SessionHistory = () => {
               </div>
             )}
 
-            {stats.data.byTask.length > 0 && (
+            {stats.byTask.length > 0 && (
               <div className="space-y-3">
                 <div className="flex items-center gap-2">
                   <Briefcase className="w-4 h-4 text-zinc-400" />
@@ -172,7 +142,7 @@ export const SessionHistory = () => {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {stats.data.byTask.map((task) => (
+                      {stats.byTask.map((task) => (
                         <TableRow key={task.taskId} className="group transition-colors hover:bg-zinc-50/50">
                           <TableCell className="font-medium text-zinc-900">
                             {task.taskTitle}
