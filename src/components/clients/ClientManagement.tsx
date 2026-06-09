@@ -17,6 +17,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { createClient, deleteClient, updateClient } from '@/src/api/endpoints/clients.api';
 import type { CreateClientRequest, UpdateClientRequest } from '@/src/api/endpoints/clients.api';
 import { useClients, useEmployees } from '@/src/hooks/useApiQueries';
+import { queryKeys } from '@/src/shared/constants/query-keys';
 import { formatCurrency } from '@/src/lib/utils';
 
 type ClientFormState = {
@@ -130,7 +131,7 @@ const ClientManagementComponent = () => {
   const createMutation = useMutation({
     mutationFn: createClient,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.clients({ scope: user?.role ?? 'anonymous' }) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.clients() });
       toast.success('Client added successfully');
       resetForm();
     },
@@ -142,7 +143,7 @@ const ClientManagementComponent = () => {
   const updateMutation = useMutation({
     mutationFn: ({ id, body }: { id: string; body: UpdateClientRequest }) => updateClient(id, body),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.clients({ scope: user?.role ?? 'anonymous' }) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.clients() });
       toast.success('Client updated successfully');
       resetForm();
     },
@@ -154,7 +155,7 @@ const ClientManagementComponent = () => {
   const deleteMutation = useMutation({
     mutationFn: deleteClient,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.clients({ scope: user?.role ?? 'anonymous' }) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.clients() });
       toast.success('Client removed successfully');
       setDeletingClient(null);
     },

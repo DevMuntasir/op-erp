@@ -75,7 +75,7 @@ export const LeadManagement = () => {
   const [form, setForm] = useState<LeadFormState>(initialFormState);
 
   const leadsQuery = useQuery({
-    queryKey: queryKeys.leads({ scope: user?.role ?? 'anonymous' }),
+    queryKey: queryKeys.leads(),
     queryFn: listLeads,
     enabled: !!user,
   });
@@ -83,7 +83,7 @@ export const LeadManagement = () => {
   const createMutation = useMutation({
     mutationFn: createLead,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.leads({ scope: user?.role ?? 'anonymous' }) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.leads() });
       toast.success('Lead added successfully');
       setIsAdding(false);
       resetForm();
@@ -96,7 +96,7 @@ export const LeadManagement = () => {
   const updateMutation = useMutation({
     mutationFn: ({ id, body }: { id: string; body: UpdateLeadRequest }) => updateLead(id, body),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.leads({ scope: user?.role ?? 'anonymous' }) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.leads() });
       toast.success('Lead updated successfully');
       setEditingLead(null);
       resetForm();
@@ -109,7 +109,7 @@ export const LeadManagement = () => {
   const deleteMutation = useMutation({
     mutationFn: deleteLead,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.leads({ scope: user?.role ?? 'anonymous' }) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.leads() });
       toast.success('Lead deleted successfully');
       setDeletingLead(null);
     },
