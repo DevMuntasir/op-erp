@@ -40,6 +40,7 @@ const ProposalPreview = lazy(() => import('@/src/components/proposals/ProposalPr
 const ChatSystem = lazy(() => import('@/src/components/communication/ChatSystem').then(m => ({ default: m.ChatSystem })));
 const CallHistory = lazy(() => import('@/src/components/calls/CallHistory').then(m => ({ default: m.CallHistory })));
 const AdminManagement = lazy(() => import('@/src/components/admins/AdminManagement').then(m => ({ default: m.AdminManagement })));
+const DeleteRequests = lazy(() => import('@/src/components/admins/DeleteRequests').then(m => ({ default: m.DeleteRequests })));
 
 // Lazy load public pages
 const DeleteAccountRequestPage = lazy(() => import('@/src/features/auth/DeleteAccountRequestPage').then(m => ({ default: m.DeleteAccountRequestPage })));
@@ -76,6 +77,7 @@ function AdminArea() {
           <Route path="proposals/preview/:id" element={<ProposalPreview />} />
           <Route path="messages" element={<ChatSystem />} />
           <Route path="calls" element={<CallHistory />} />
+          <Route path="delete-requests" element={<DeleteRequests />} />
           <Route path="profile" element={<ProfilePage />} />
         </Routes>
       </Suspense>
@@ -154,6 +156,7 @@ function SuperAdminArea() {
           <Route path="messages" element={<ChatSystem />} />
           <Route path="calls" element={<CallHistory />} />
           <Route path="admins" element={<AdminManagement />} />
+          <Route path="delete-requests" element={<DeleteRequests />} />
           <Route path="profile" element={<ProfilePage />} />
         </Routes>
       </Suspense>
