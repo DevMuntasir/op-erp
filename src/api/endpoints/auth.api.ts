@@ -1,4 +1,4 @@
-import { getApiData, postApiData } from '@/src/api/client';
+import { deleteApiData, getApiData, postApiData } from '@/src/api/client';
 import { User } from '@/src/shared/types/domain';
 
 export function getCurrentUser() {
@@ -7,4 +7,8 @@ export function getCurrentUser() {
 
 export function acceptInvite(code: string) {
   return postApiData('/v1/me/accept-invite', { code });
+}
+
+export function deleteMyAccount() {
+  return deleteApiData<{ success: boolean }>('/v1/auth/me');
 }

@@ -1,5 +1,6 @@
 import express from "express";
 import type * as core from "express-serve-static-core";
+import { randomUUID } from "crypto";
 import path from "path";
 import { fileURLToPath } from "url";
 import { createServer as createViteServer } from "vite";
@@ -771,6 +772,54 @@ async function startServer() {
       res.status(401).json({
         error: { message: error.message || "Auth failed", code: "AUTH_ERROR" },
         meta: { requestId: "N/A" }
+      });
+    }
+  });
+
+  // API: Soft delete your own account
+  app.delete("/v1/auth/me", async (req: core.Request, res: core.Response) => {
+    const requestId = randomUUID();
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith("Bearer ")) {
+        return res.status(401).json({
+          success: false,
+          error: { message: "Unauthorized", code: "AUTH_REQUIRED" },
+          meta: { requestId }
+        });
+      }
+
+      const token = authHeader.split("Bearer ")[1];
+      const decodedToken = await authAdmin.verifyIdToken(token);
+      const uid = decodedToken.uid;
+
+      // Soft delete: flag the profile record(s) instead of removing them
+      const deletedAt = new Date().toISOString();
+      for (const col of ["users", "profiles"]) {
+        const docRef = dbAdmin.collection(col).doc(uid);
+        const docSnap = await docRef.get();
+        if (docSnap.exists) {
+          await docRef.set({
+            isDeleted: true,
+            deletedAt,
+            isDisabled: true,
+            disabledAt: deletedAt,
+            status: "offline",
+          }, { merge: true });
+        }
+      }
+
+      // Block future sign-ins and invalidate existing sessions
+      await authAdmin.updateUser(uid, { disabled: true });
+      await authAdmin.revokeRefreshTokens(uid);
+
+      res.json({ success: true, data: { success: true }, meta: { requestId } });
+    } catch (error: any) {
+      console.error("[DELETE /v1/auth/me] Error:", error.message);
+      res.status(401).json({
+        success: false,
+        error: { message: error.message || "Auth failed", code: "AUTH_ERROR" },
+        meta: { requestId }
       });
     }
   });
