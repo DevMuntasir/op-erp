@@ -46,6 +46,7 @@ import {
   sendReport,
 } from '@/src/api/endpoints/reports.api';
 import { listProjects } from '@/src/api/endpoints/projects.api';
+import { apiClient } from '@/src/api/client';
 import { Report } from '@/src/shared/types/domain';
 import { compressImage, MarkdownComponents, exportReportPDF } from './report-utils';
 
@@ -67,6 +68,12 @@ const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
   const key = (status || 'draft').toLowerCase();
   const config = statusConfig[key] || { label: status || 'Draft', cls: 'bg-zinc-100 text-zinc-600 border-zinc-200' };
   return <Badge className={cn('capitalize border font-semibold', config.cls)}>{config.label}</Badge>;
+};
+
+const resolvePdfUrl = (url: string): string => {
+  if (/^https?:\/\//i.test(url)) return url;
+  const base = apiClient.defaults.baseURL ?? '';
+  return `${base.replace(/\/$/, '')}/${url.replace(/^\//, '')}`;
 };
 
 const toDateLabel = (value: unknown): string => {
@@ -300,6 +307,10 @@ export const ReportsManagement: React.FC = () => {
   };
 
   const handleExport = async (r: Report) => {
+    if (r.pdfUrl) {
+      window.open(resolvePdfUrl(r.pdfUrl), '_blank', 'noopener,noreferrer');
+      return;
+    }
     setExporting(true);
     const toastId = toast.loading('Generating high-fidelity PDF report...');
     const ok = await exportReportPDF(r.clientName || r.projectName || 'Report', 'report-detail-capture', (msg) =>
@@ -549,55 +560,65 @@ export const ReportsManagement: React.FC = () => {
                 )}
               </div>
 
-              <ScrollArea className="flex-1 overflow-auto">
-                <div className="p-8 bg-white" id="report-detail-capture">
-                  <div className="mb-8 pb-6 border-b border-zinc-100">
-                    <div className="flex flex-wrap justify-between items-end gap-4">
-                      <div>
-                        <h2 className="text-2xl font-bold text-zinc-900 tracking-tight leading-none mb-1">{selectedReport.clientName || 'Untitled report'}</h2>
-                        <p className="text-brand font-semibold text-sm">{selectedReport.projectName}</p>
-                      </div>
-                      {selectedReport.reportingPeriod && (
-                        <div className="text-right">
-                          <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest leading-none mb-1">Reporting Period</p>
-                          <p className="text-sm font-semibold text-zinc-900 leading-none">{selectedReport.reportingPeriod}</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="report-content markdown-body">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={MarkdownComponents}>
-                      {selectedReport.contentMd || '_No content available._'}
-                    </ReactMarkdown>
-                  </div>
-
-                  {selectedReport.screenshotUrls && selectedReport.screenshotUrls.length > 0 && (
-                    <div className="mt-10 pt-8 border-t border-zinc-100">
-                      <h4 className="text-xs font-black uppercase tracking-widest text-zinc-400 mb-4 flex items-center gap-2">
-                        <ImageIcon className="w-4 h-4" />
-                        Evidence ({selectedReport.screenshotUrls.length})
-                      </h4>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        {selectedReport.screenshotUrls.map((img, idx) => (
-                          <a
-                            key={idx}
-                            href={img}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="group relative rounded-xl overflow-hidden border border-zinc-200 bg-zinc-50"
-                          >
-                            <img src={img} alt={`Evidence ${idx + 1}`} className="w-full aspect-[4/3] object-cover transition-transform group-hover:scale-105" referrerPolicy="no-referrer" />
-                            <div className="absolute bottom-2 left-2">
-                              <Badge className="bg-black/50 backdrop-blur-md text-white border-none text-[10px] font-bold">Evidence {idx + 1}</Badge>
-                            </div>
-                          </a>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+              {selectedReport.pdfUrl ? (
+                <div className="flex-1 min-h-0 bg-zinc-100">
+                  <iframe
+                    src={resolvePdfUrl(selectedReport.pdfUrl)}
+                    title={`${selectedReport.clientName || 'Report'} PDF`}
+                    className="w-full h-[75vh] border-0"
+                  />
                 </div>
-              </ScrollArea>
+              ) : (
+                <ScrollArea className="flex-1 overflow-auto">
+                  <div className="p-8 bg-white" id="report-detail-capture">
+                    <div className="mb-8 pb-6 border-b border-zinc-100">
+                      <div className="flex flex-wrap justify-between items-end gap-4">
+                        <div>
+                          <h2 className="text-2xl font-bold text-zinc-900 tracking-tight leading-none mb-1">{selectedReport.clientName || 'Untitled report'}</h2>
+                          <p className="text-brand font-semibold text-sm">{selectedReport.projectName}</p>
+                        </div>
+                        {selectedReport.reportingPeriod && (
+                          <div className="text-right">
+                            <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest leading-none mb-1">Reporting Period</p>
+                            <p className="text-sm font-semibold text-zinc-900 leading-none">{selectedReport.reportingPeriod}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="report-content markdown-body">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]} components={MarkdownComponents}>
+                        {selectedReport.contentMd || '_No content available._'}
+                      </ReactMarkdown>
+                    </div>
+
+                    {selectedReport.screenshotUrls && selectedReport.screenshotUrls.length > 0 && (
+                      <div className="mt-10 pt-8 border-t border-zinc-100">
+                        <h4 className="text-xs font-black uppercase tracking-widest text-zinc-400 mb-4 flex items-center gap-2">
+                          <ImageIcon className="w-4 h-4" />
+                          Evidence ({selectedReport.screenshotUrls.length})
+                        </h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          {selectedReport.screenshotUrls.map((img, idx) => (
+                            <a
+                              key={idx}
+                              href={img}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="group relative rounded-xl overflow-hidden border border-zinc-200 bg-zinc-50"
+                            >
+                              <img src={img} alt={`Evidence ${idx + 1}`} className="w-full aspect-[4/3] object-cover transition-transform group-hover:scale-105" referrerPolicy="no-referrer" />
+                              <div className="absolute bottom-2 left-2">
+                                <Badge className="bg-black/50 backdrop-blur-md text-white border-none text-[10px] font-bold">Evidence {idx + 1}</Badge>
+                              </div>
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </ScrollArea>
+              )}
             </>
           )}
         </DialogContent>
