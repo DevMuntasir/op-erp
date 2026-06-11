@@ -18,6 +18,7 @@ const normalizeReport = (report: Partial<Report>): Report => ({
   employeeNotes: report.employeeNotes ?? null,
   screenshotUrls: Array.isArray(report.screenshotUrls) ? report.screenshotUrls : [],
   contentMd: report.contentMd ?? '',
+  pdfUrl: report.pdfUrl ?? null,
   status: report.status ?? 'draft',
   sentToClients: report.sentToClients,
   sentToClient: report.sentToClient ?? false,
