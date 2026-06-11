@@ -832,7 +832,7 @@ async function startServer() {
   };
 
   // API: Public - submit an account deletion request to the admin
-  app.post("/delete-request", async (req: core.Request, res: core.Response) => {
+  app.post("/v1/auth/delete-request", async (req: core.Request, res: core.Response) => {
     const requestId = randomUUID();
     try {
       const { email, name, reason } = req.body || {};
@@ -944,6 +944,155 @@ async function startServer() {
       res.status(500).json({
         success: false,
         error: { message: "Failed to fetch deletion request", code: "INTERNAL_ERROR" },
+        meta: { requestId }
+      });
+    }
+  });
+
+  // API: Admin - list all account deletion requests
+  app.get("/v1/admin/delete-requests", verifyAdmin as any, async (req: AdminRequest, res: core.Response) => {
+    const requestId = randomUUID();
+    try {
+      const snap = await dbAdmin.collection("deleteRequests")
+        .orderBy("createdAt", "desc")
+        .get();
+      const requests = snap.docs.map((d: any) => d.data());
+      res.json({ success: true, data: requests, meta: { requestId } });
+    } catch (error: any) {
+      console.error("[GET /v1/admin/delete-requests] Error:", error.message);
+      res.status(500).json({
+        success: false,
+        error: { message: "Failed to fetch deletion requests", code: "INTERNAL_ERROR" },
+        meta: { requestId }
+      });
+    }
+  });
+
+  // API: Admin - approve a deletion request and soft delete the account
+  app.post("/v1/admin/delete-requests/:id/approve", verifyAdmin as any, async (req: AdminRequest, res: core.Response) => {
+    const requestId = randomUUID();
+    try {
+      const { id } = req.params;
+      const docRef = dbAdmin.collection("deleteRequests").doc(id);
+      const docSnap = await docRef.get();
+
+      if (!docSnap.exists) {
+        return res.status(404).json({
+          success: false,
+          error: { message: "Deletion request not found", code: "NOT_FOUND" },
+          meta: { requestId }
+        });
+      }
+
+      const request = docSnap.data()!;
+      if (request.status !== "pending") {
+        return res.status(409).json({
+          success: false,
+          error: { message: `Request already ${request.status}`, code: "ALREADY_RESOLVED" },
+          meta: { requestId }
+        });
+      }
+
+      // Locate the auth account for the requested email
+      let uid: string | null = null;
+      try {
+        const userRecord = await authAdmin.getUserByEmail(request.email);
+        uid = userRecord.uid;
+      } catch (lookupErr: any) {
+        console.warn(`[Delete Request] No auth account found for ${request.email}: ${lookupErr.message}`);
+      }
+
+      const resolvedAt = new Date().toISOString();
+
+      if (uid) {
+        // Soft delete: flag the profile record(s) instead of removing them
+        for (const col of ["users", "profiles"]) {
+          const ref = dbAdmin.collection(col).doc(uid);
+          const snap = await ref.get();
+          if (snap.exists) {
+            await ref.set({
+              isDeleted: true,
+              deletedAt: resolvedAt,
+              isDisabled: true,
+              disabledAt: resolvedAt,
+              status: "offline",
+            }, { merge: true });
+          }
+        }
+
+        // Block future sign-ins and invalidate existing sessions
+        await authAdmin.updateUser(uid, { disabled: true });
+        await authAdmin.revokeRefreshTokens(uid);
+      }
+
+      await docRef.set({
+        status: "approved",
+        resolvedAt,
+        resolvedBy: req.admin?.uid ?? null,
+        accountFound: !!uid,
+      }, { merge: true });
+
+      console.log(`[Delete Request] ${id} approved by admin ${req.admin?.uid} (account ${uid ?? "not found"})`);
+
+      res.json({
+        success: true,
+        data: { id, status: "approved", accountFound: !!uid },
+        meta: { requestId }
+      });
+    } catch (error: any) {
+      console.error("[POST /v1/admin/delete-requests/:id/approve] Error:", error.message);
+      res.status(500).json({
+        success: false,
+        error: { message: error.message || "Failed to approve deletion request", code: "INTERNAL_ERROR" },
+        meta: { requestId }
+      });
+    }
+  });
+
+  // API: Admin - reject a deletion request (account is left untouched)
+  app.post("/v1/admin/delete-requests/:id/reject", verifyAdmin as any, async (req: AdminRequest, res: core.Response) => {
+    const requestId = randomUUID();
+    try {
+      const { id } = req.params;
+      const docRef = dbAdmin.collection("deleteRequests").doc(id);
+      const docSnap = await docRef.get();
+
+      if (!docSnap.exists) {
+        return res.status(404).json({
+          success: false,
+          error: { message: "Deletion request not found", code: "NOT_FOUND" },
+          meta: { requestId }
+        });
+      }
+
+      const request = docSnap.data()!;
+      if (request.status !== "pending") {
+        return res.status(409).json({
+          success: false,
+          error: { message: `Request already ${request.status}`, code: "ALREADY_RESOLVED" },
+          meta: { requestId }
+        });
+      }
+
+      const resolvedAt = new Date().toISOString();
+      await docRef.set({
+        status: "rejected",
+        resolvedAt,
+        resolvedBy: req.admin?.uid ?? null,
+      }, { merge: true });
+
+      console.log(`[Delete Request] ${id} rejected by admin ${req.admin?.uid}`);
+
+      res.json({
+        success: true,
+        data: { id, status: "rejected" },
+        meta: { requestId }
+      });
+    } catch (error: any) {
+      console.error("[POST /v1/admin/delete-requests/:id/reject] Error:", error.message);
+      res.status(500).json({
+        success: false,
+        error: { message: error.message || "Failed to reject deletion request", code: "INTERNAL_ERROR" },
         meta: { requestId }
       });
     }
