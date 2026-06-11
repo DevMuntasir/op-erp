@@ -824,6 +824,131 @@ async function startServer() {
     }
   });
 
+  // Mask an email for public status responses (j***@example.com)
+  const maskEmail = (email: string) => {
+    const [local, domain] = email.split("@");
+    if (!domain) return "***";
+    return `${local.charAt(0)}***@${domain}`;
+  };
+
+  // API: Public - submit an account deletion request to the admin
+  app.post("/delete-request", async (req: core.Request, res: core.Response) => {
+    const requestId = randomUUID();
+    try {
+      const { email, name, reason } = req.body || {};
+
+      if (!email || typeof email !== "string" || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+        return res.status(400).json({
+          success: false,
+          error: { message: "A valid email address is required", code: "INVALID_EMAIL" },
+          meta: { requestId }
+        });
+      }
+
+      const normalizedEmail = email.toLowerCase().trim();
+
+      // Reuse an open request for the same email instead of creating duplicates
+      const existingSnap = await dbAdmin.collection("deleteRequests")
+        .where("email", "==", normalizedEmail)
+        .where("status", "==", "pending")
+        .limit(1)
+        .get();
+
+      if (!existingSnap.empty) {
+        const existing = existingSnap.docs[0].data();
+        return res.json({
+          success: true,
+          data: { id: existing.id, status: existing.status, alreadyExists: true },
+          meta: { requestId }
+        });
+      }
+
+      const id = randomUUID();
+      const deleteRequest = {
+        id,
+        email: normalizedEmail,
+        name: typeof name === "string" ? name.trim().slice(0, 200) : "",
+        reason: typeof reason === "string" ? reason.trim().slice(0, 2000) : "",
+        status: "pending",
+        createdAt: new Date().toISOString(),
+        resolvedAt: null,
+      };
+
+      await dbAdmin.collection("deleteRequests").doc(id).set(deleteRequest);
+      console.log(`[Delete Request] New account deletion request ${id} for ${normalizedEmail}`);
+
+      // Best-effort: notify all admins about the new request
+      try {
+        const adminSnap = await dbAdmin.collection("users")
+          .where("role", "in", ["admin", "super_admin"])
+          .get();
+        await Promise.all(adminSnap.docs.map((adminDoc: any) =>
+          dbAdmin.collection("notifications").add({
+            userId: adminDoc.id,
+            title: "Account Deletion Request",
+            message: `${normalizedEmail} has requested account deletion. Request ID: ${id}`,
+            type: "account",
+            status: "sent",
+            read: false,
+            createdAt: new Date().toISOString(),
+          })
+        ));
+      } catch (notifyErr: any) {
+        console.warn(`[Delete Request] Failed to notify admins: ${notifyErr.message}`);
+      }
+
+      res.status(201).json({
+        success: true,
+        data: { id, status: "pending" },
+        meta: { requestId }
+      });
+    } catch (error: any) {
+      console.error("[POST /delete-request] Error:", error.message);
+      res.status(500).json({
+        success: false,
+        error: { message: "Failed to submit deletion request", code: "INTERNAL_ERROR" },
+        meta: { requestId }
+      });
+    }
+  });
+
+  // API: Public - check the status of an account deletion request
+  app.get("/delete-request/:id", async (req: core.Request, res: core.Response) => {
+    const requestId = randomUUID();
+    try {
+      const { id } = req.params;
+      const docSnap = await dbAdmin.collection("deleteRequests").doc(id).get();
+
+      if (!docSnap.exists) {
+        return res.status(404).json({
+          success: false,
+          error: { message: "Deletion request not found", code: "NOT_FOUND" },
+          meta: { requestId }
+        });
+      }
+
+      const data = docSnap.data()!;
+      res.json({
+        success: true,
+        data: {
+          id: data.id,
+          email: maskEmail(data.email),
+          status: data.status,
+          createdAt: data.createdAt,
+          resolvedAt: data.resolvedAt ?? null,
+        },
+        meta: { requestId }
+      });
+    } catch (error: any) {
+      console.error("[GET /delete-request/:id] Error:", error.message);
+      res.status(500).json({
+        success: false,
+        error: { message: "Failed to fetch deletion request", code: "INTERNAL_ERROR" },
+        meta: { requestId }
+      });
+    }
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

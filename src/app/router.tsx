@@ -41,6 +41,9 @@ const ChatSystem = lazy(() => import('@/src/components/communication/ChatSystem'
 const CallHistory = lazy(() => import('@/src/components/calls/CallHistory').then(m => ({ default: m.CallHistory })));
 const AdminManagement = lazy(() => import('@/src/components/admins/AdminManagement').then(m => ({ default: m.AdminManagement })));
 
+// Lazy load public pages
+const DeleteAccountRequestPage = lazy(() => import('@/src/features/auth/DeleteAccountRequestPage').then(m => ({ default: m.DeleteAccountRequestPage })));
+
 const RouteLoader = () => (
   <div className="flex items-center justify-center min-h-screen">
     <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500" />
@@ -164,6 +167,23 @@ export function AppRouter() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/invite/:token" element={<InvitePage />} />
+        <Route
+          path="/delete-request"
+          element={
+            <Suspense fallback={<RouteLoader />}>
+              <DeleteAccountRequestPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/delete-request/:id"
+          element={
+            <Suspense fallback={<RouteLoader />}>
+              <DeleteAccountRequestPage />
+            </Suspense>
+          }
+        />
+
         <Route element={<ProtectedRoute roles={['admin']} />}>
           <Route path="/admin/*" element={<AdminArea />} />
         </Route>
