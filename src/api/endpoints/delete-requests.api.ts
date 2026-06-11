@@ -9,7 +9,7 @@ export interface DeleteRequestStatus {
   createdAt: string;
   resolvedAt: string | null;
 }
-
+// delete-requests.api.ts
 export interface CreateDeleteRequestPayload {
   email: string;
   name?: string;
