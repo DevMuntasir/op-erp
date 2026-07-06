@@ -5,6 +5,10 @@ export function listEmployees() {
   return getApiData<User[]>('/v1/admin/employees/');
 }
 
+export function getEmployee(uid: string) {
+  return getApiData<User>(`/v1/admin/employees/${uid}`);
+}
+
 export function updateEmployee(
   uid: string,
   body: Partial<Pick<User, 'name' | 'phone' | 'phoneNumber' | 'photoURL' | 'status' | 'role'>>,

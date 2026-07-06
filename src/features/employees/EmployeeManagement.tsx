@@ -307,13 +307,15 @@ export function EmployeeManagement() {
                             </Button>
                           </>
                         ) : (
-                            <Button size="icon" variant="ghost" onClick={() => navigate(`/employees/${employee.uid}`)}>
+                          <>
+                            <Button size="icon" variant="ghost" onClick={() => navigate(employee.uid)}>
                               <Eye className="h-4 w-4" />
                             </Button>
+                            <Button variant="ghost" size="icon" onClick={() => setDeletingUser(employee)}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </>
                         )}
-                        <Button variant="ghost" size="icon"  onClick={() => setDeletingUser(employee)}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>

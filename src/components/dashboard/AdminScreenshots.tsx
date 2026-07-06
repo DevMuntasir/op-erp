@@ -269,26 +269,38 @@ export const AdminScreenshots = () => {
           {screenshots.map((screen) => (
             <Card
               key={screen.id}
-              className="group border-zinc-200 shadow-sm hover:shadow-lg transition-all duration-300 rounded-2xl overflow-hidden bg-white"
+              onClick={() => setSelectedScreenshot(screen)}
+              className="group border-zinc-200 shadow-sm hover:shadow-lg transition-all duration-300 rounded-2xl overflow-hidden bg-white cursor-pointer"
             >
               <div className="relative aspect-video bg-zinc-100 overflow-hidden">
                 <img
                   src={screen.storagePath}
-                  alt="Staff activity screenshot"
-                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105 cursor-pointer"
+                  alt={`Screenshot captured from ${getUserName(screen.userId)}`}
+                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                   referrerPolicy="no-referrer"
-                  onClick={() => setSelectedScreenshot(screen)}
                 />
-                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-all duration-300 flex flex-col items-center justify-center gap-3">
+
+                {/* Always-visible title bar with employee name */}
+                <div className="absolute top-0 inset-x-0 bg-linear-to-b from-black/80 via-black/40 to-transparent pt-3 pb-8 px-3 flex items-center gap-2.5">
+                  <Avatar className="w-8 h-8 border-2 border-white/30 shadow-md rounded-lg shrink-0">
+                    <AvatarImage src={getUserAvatar(screen.userId)} />
+                    <AvatarFallback className="bg-zinc-700 text-white text-xs font-bold">{getUserName(screen.userId)[0]}</AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0">
+                    <p className="text-sm font-black text-white truncate tracking-tight leading-tight drop-shadow-sm">
+                      {getUserName(screen.userId)}
+                    </p>
+                    <p className="text-[10px] text-white/80 font-bold truncate">
+                      {formatDateTimeHalifax(screen.timestamp)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-all duration-300 flex flex-col items-center justify-center gap-3">
                   <Maximize2 className="w-10 h-10 text-white stroke-[1.5]" />
                   <Badge className="bg-white text-zinc-900 font-black border-none shadow-xl transform translate-y-2 group-hover:translate-y-0 transition-transform">
                     View Capture
                   </Badge>
-                </div>
-                <div className="absolute top-3 right-3 flex gap-2">
-                   <div className="bg-zinc-900/80 backdrop-blur-md rounded-lg px-2 py-1 text-[10px] font-black text-white uppercase tracking-wider">
-                     {formatDateTimeHalifax(screen.timestamp).split(',')[1]}
-                   </div>
                 </div>
                 <div className="absolute bottom-3 left-3">
                    <Badge className={`text-[9px] font-black uppercase tracking-widest border-none ${
@@ -303,7 +315,7 @@ export const AdminScreenshots = () => {
                     e.stopPropagation();
                     toggleSelectScreenshot(screen.id);
                   }}
-                  className="absolute top-3 right-3 p-1.5 bg-white rounded-lg shadow-md hover:shadow-lg transition-all opacity-0 group-hover:opacity-100"
+                  className="absolute bottom-3 right-3 p-1.5 bg-white rounded-lg shadow-md hover:shadow-lg transition-all opacity-0 group-hover:opacity-100 z-10"
                 >
                   {selectedScreenshots.has(screen.id) ? (
                     <CheckCircle2 className="w-5 h-5 text-blue-500" />
@@ -312,35 +324,22 @@ export const AdminScreenshots = () => {
                   )}
                 </button>
               </div>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  <Avatar className="w-9 h-9 border-2 border-zinc-50 shadow-sm rounded-xl">
-                    <AvatarImage src={getUserAvatar(screen.userId)} />
-                    <AvatarFallback className="bg-zinc-100 text-xs font-bold">{getUserName(screen.userId)[0]}</AvatarFallback>
-                  </Avatar>
-                  <div className="min-w-0">
-                    <p className="text-sm font-black text-zinc-900 truncate tracking-tight">
-                      {getUserName(screen.userId)}
-                    </p>
-                    <p className="text-[10px] text-zinc-500 flex items-center gap-1 font-bold">
-                      <Clock className="w-3 h-3" />
-                      {formatDateTimeHalifax(screen.timestamp).split(',')[0]}
-                    </p>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                   
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setScreenshotToDelete(screen);
-                      setDeleteConfirmOpen(true);
-                    }}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    
-                  </Button>
-                </div>
+              <CardContent className="p-3 flex items-center justify-between gap-2">
+                <p className="text-[10px] text-zinc-500 flex items-center gap-1 font-bold">
+                  <Clock className="w-3 h-3" />
+                  {formatDateTimeHalifax(screen.timestamp)}
+                </p>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setScreenshotToDelete(screen);
+                    setDeleteConfirmOpen(true);
+                  }}
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
               </CardContent>
             </Card>
           ))}

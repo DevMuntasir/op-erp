@@ -83,7 +83,7 @@ const PricingCard = React.memo(({
               onChange={e => onLabelChange(e.target.value)}
               className="text-sm font-black uppercase tracking-[0.15em] text-zinc-600 border-none p-0 h-auto focus-visible:ring-0 bg-transparent w-3/4"
             />
-            <div
+            {/* <div
               onClick={e => {
                 e.stopPropagation();
                 onToggle();
@@ -96,7 +96,7 @@ const PricingCard = React.memo(({
               )}
             >
               <CheckCircle2 className="w-4 h-4" />
-            </div>
+            </div> */}
           </div>
 
           <div className="mb-8">
@@ -194,8 +194,9 @@ export const PricingStep = React.memo(({ formData, onUpdate }: PricingStepProps)
         features: [...(p.items ?? [])]
       }));
       setAvailablePackages(prev => {
-        const others = prev.filter(p => !stored.find(s => s.id === p.id));
-        return [...stored, ...others];
+        const merged = prev.map(p => stored.find(s => s.id === p.id) ?? p);
+        const missing = stored.filter(s => !prev.find(p => p.id === s.id));
+        return [...merged, ...missing];
       });
     }
   }, [formData.pricingPlans]);

@@ -586,7 +586,7 @@ const ClientManagementComponent = () => {
                     {isAdmin && (
                       <TableCell className="px-6 py-4 text-right">
                         <div className="flex justify-end gap-1">
-                          {isSuperAdmin && (
+                          {/* {isSuperAdmin && (
                             <Button
                               variant="ghost"
                               size="icon"
@@ -596,8 +596,8 @@ const ClientManagementComponent = () => {
                             >
                               <Receipt className="w-4 h-4" />
                             </Button>
-                          )}
-                          <Button
+                          )} */}
+                          {/* <Button
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8 rounded-lg text-amber-500 hover:text-amber-600 hover:bg-amber-50"
@@ -623,7 +623,7 @@ const ClientManagementComponent = () => {
                             onClick={() => disabledFeatureMessage('Client portal invite')}
                           >
                             <ShieldCheck className="w-4 h-4" />
-                          </Button>
+                          </Button> */}
                           <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100" onClick={() => handleEdit(client)}>
                             <Edit2 className="w-4 h-4" />
                           </Button>

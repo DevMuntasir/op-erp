@@ -1,10 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/src/App';
 import { useTasks, useUserSessions } from '@/src/hooks/useApiQueries';
-import { getApiData } from '@/src/api/client';
+import { getEmployee } from '@/src/api/endpoints/employees.api';
+import { queryKeys } from '@/src/shared/constants/query-keys';
 import { isUserOnline, formatLastSeenHalifax, formatDateTimeHalifax } from '@/src/lib/presence';
-import { User, Task, Session } from '@/src/types';
+import { Task, Session } from '@/src/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -38,38 +40,22 @@ export const EmployeeDetail = () => {
   const { employeeId } = useParams<{ employeeId: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [employee, setEmployee] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
 
-  // Fetch employee from API
-  useEffect(() => {
-    if (!employeeId || !user) {
-      if (!employeeId) setLoading(false);
-      return;
+  const employeeQuery = useQuery({
+    queryKey: queryKeys.employee(employeeId ?? ''),
+    queryFn: () => getEmployee(employeeId!),
+    enabled: !!employeeId,
+  });
+
+  const employee = employeeQuery.data;
+  const loading = employeeQuery.isLoading;
+
+  React.useEffect(() => {
+    if (employee && user?.role === 'admin' && employee.adminId !== user.uid) {
+      toast.error('Unauthorized access');
+      navigate('/admin/employees');
     }
-
-    const fetchEmployee = async () => {
-      try {
-        const employees = await getApiData('/v1/employees/');
-        const foundEmployee = employees.find((e: any) => e.uid === employeeId);
-        if (foundEmployee) {
-          // Security check: if admin, must be their employee
-          if (user.role === 'admin' && foundEmployee.adminId !== user.uid) {
-            toast.error("Unauthorized access");
-            navigate('/admin/employees');
-            return;
-          }
-          setEmployee(foundEmployee as User);
-        }
-        setLoading(false);
-      } catch (error) {
-        console.error("Error fetching employee:", error);
-        setLoading(false);
-      }
-    };
-
-    fetchEmployee();
-  }, [employeeId, user, navigate]);
+  }, [employee, user, navigate]);
 
   // Fetch tasks and sessions using React Query
   const tasksQuery = useTasks();
@@ -116,7 +102,7 @@ export const EmployeeDetail = () => {
           </Button>
           <div className="flex items-center gap-4">
             <Avatar className="w-16 h-16 border-2 border-white shadow-sm">
-              <AvatarImage src={employee.photoURL} />
+              <AvatarImage src={employee.photoURL ?? undefined} />
               <AvatarFallback className="text-xl">{employee.name?.[0] || 'U'}</AvatarFallback>
             </Avatar>
             <div>
@@ -283,7 +269,7 @@ export const EmployeeDetail = () => {
                 </div>
                 <div>
                   <p className="text-[10px] text-zinc-400 uppercase font-bold tracking-wider">Joined Date</p>
-                  <p className="text-sm">Oct 12, 2025</p>
+                  <p className="text-sm">{employee.createdAt ? formatDateTimeHalifax(employee.createdAt) : 'Unknown'}</p>
                 </div>
               </div>
               <div className="flex items-center gap-3">
@@ -292,7 +278,7 @@ export const EmployeeDetail = () => {
                 </div>
                 <div>
                   <p className="text-[10px] text-zinc-400 uppercase font-bold tracking-wider">Phone Number</p>
-                  <p className="text-sm">{employee.phoneNumber || 'Not provided'}</p>
+                  <p className="text-sm">{employee.phone || 'Not provided'}</p>
                 </div>
               </div>
               <div className="flex items-center gap-3">
