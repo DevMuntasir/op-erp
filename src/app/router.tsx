@@ -25,7 +25,7 @@ const ClientPortal = lazy(() => import('@/src/components/clients/ClientPortal').
 
 // Lazy load other components
 const SessionHistory = lazy(() => import('@/src/components/employees/SessionHistory').then(m => ({ default: m.SessionHistory })));
-const BillingManagement = lazy(() => import('@/src/components/billing/BillingManagement').then(m => ({ default: m.BillingManagement })));
+const BillingManagement = lazy(() => import('@/src/components/billing/BillingManagement'));
 const LeadManagement = lazy(() => import('@/src/components/leads/LeadManagement').then(m => ({ default: m.LeadManagement })));
 const LeadFinder = lazy(() => import('@/src/components/leads/LeadFinder').then(m => ({ default: m.LeadFinder })));
 const ProjectManagement = lazy(() => import('@/src/components/projects/ProjectManagement').then(m => ({ default: m.ProjectManagement })));

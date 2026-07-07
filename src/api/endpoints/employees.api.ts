@@ -28,6 +28,12 @@ export function listInvites() {
   return getApiData<Invite[]>('/v1/admin/invites/');
 }
 
-export function createInvite(body: { email: string; role?: 'employee' | 'admin' }) {
+export function createInvite(body: {
+  email: string;
+  role?: 'employee' | 'admin';
+  type?: 'password' | 'invitation';
+  password?: string;
+  name?: string;
+}) {
   return postApiData<Invite, typeof body>('/v1/admin/invites/', body);
 }

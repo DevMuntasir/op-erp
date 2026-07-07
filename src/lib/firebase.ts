@@ -12,7 +12,7 @@ const app = initializeApp(firebaseConfig);
 
 // Initialize Firestore with settings to resolve connectivity issues in some environments
 // Force long polling if WebSockets are failing (common in proxied environments)
-const dbId = firebaseConfig.firestoreDatabaseId || '(default)';
+const dbId = (firebaseConfig as { firestoreDatabaseId?: string }).firestoreDatabaseId || '(default)';
 export let db = initializeFirestore(app, {
   experimentalForceLongPolling: true,
   cacheSizeBytes: CACHE_SIZE_UNLIMITED,

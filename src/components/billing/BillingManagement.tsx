@@ -459,8 +459,29 @@ const BillingManagement: React.FC = () => {
   const invoicesQuery = useInvoices();
 
   useEffect(() => {
-    setClients(clientsQuery.data ?? []);
-    setInvoices(invoicesQuery.data ?? []);
+    setClients(
+      (clientsQuery.data ?? []).map((c) => ({
+        id: c.id,
+        name: c.name,
+        email: c.email,
+        invoiceValue: Number(c.invoiceValue || 0),
+        autoPay: (c as any).autoPay,
+      }))
+    );
+    setInvoices(
+      (invoicesQuery.data ?? []).map((inv) => ({
+        ...inv,
+        userId: (inv as any).userId,
+        type: (inv as any).type,
+        paymentDate: (inv as any).paymentDate,
+        lineItems: inv.lineItems?.map((li, idx) => ({
+          id: String(idx),
+          description: li.description,
+          quantity: li.quantity,
+          price: li.unitPrice,
+        })),
+      })) as InvoiceRecord[]
+    );
     setLoading(clientsQuery.isLoading || invoicesQuery.isLoading);
   }, [clientsQuery.data, clientsQuery.isLoading, invoicesQuery.data, invoicesQuery.isLoading]);
 
