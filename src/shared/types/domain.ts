@@ -278,6 +278,7 @@ export interface Report {
   employeeNotes?: string | null;
   screenshotUrls?: string[];
   contentMd?: string | null;
+  pdfUrl?: string | null;
   status: string;
   sentToClients?: unknown;
   sentToClient?: boolean;

@@ -33,6 +33,7 @@ import {
   Sparkles,
   User as UserIcon,
   UserPlus,
+  UserX,
   Users
 } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
@@ -55,6 +56,7 @@ const navItems = {
     { icon: Map, label: 'Lead Finder', path: '/admin/finder' },
     { icon: MessageSquare, label: 'Messages', path: '/admin/messages' },
     { icon: Phone, label: 'Call History', path: '/admin/calls' },
+    { icon: UserX, label: 'Delete Requests', path: '/admin/delete-requests' },
     { icon: UserIcon, label: 'Profile', path: '/admin/profile' },
   ],
   super_admin: [
@@ -74,6 +76,7 @@ const navItems = {
     { icon: Map, label: 'Lead Finder', path: '/super-admin/finder' },
     { icon: MessageSquare, label: 'Messages', path: '/super-admin/messages' },
     { icon: Phone, label: 'Call History', path: '/super-admin/calls' },
+    { icon: UserX, label: 'Delete Requests', path: '/super-admin/delete-requests' },
     { icon: UserIcon, label: 'Profile', path: '/super-admin/profile' },
   ],
   employee: [
@@ -408,10 +411,10 @@ export const AppLayout: React.FC<{ children: React.ReactNode, role: 'admin' | 's
                 </ScrollArea>
               </PopoverContent>
             </Popover>
-
+{/* 
             <Button variant="ghost" size="icon" className="hidden sm:inline-flex h-9 w-9 rounded-xl text-zinc-500 hover:bg-zinc-100 shrink-0">
               <Settings className="w-5 h-5" />
-            </Button>
+            </Button> */}
 
             <div className="pl-0.5">
               <Avatar className="w-8 h-8 ring-2 ring-zinc-100 ring-offset-2">

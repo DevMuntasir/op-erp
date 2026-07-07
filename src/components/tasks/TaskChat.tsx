@@ -120,15 +120,15 @@ export const TaskChat: React.FC<TaskChatProps> = ({ taskId, className, hideHeade
                 <div className="flex items-center gap-2 mb-1">
                   {!isMe && <span className="text-[10px] font-bold text-zinc-500">{msg.senderName || 'User'}</span>}
                   <span className="text-[10px] text-zinc-400">
-                    {formatTimeHalifax(msg.createdAt || msg.timestamp)}
+                    {formatTimeHalifax(msg.createdAt)}
                   </span>
                 </div>
                 <div className={`px-3 py-2 rounded-2xl max-w-[85%] text-sm shadow-sm ${
-                  isMe 
-                    ? 'bg-zinc-900 text-white rounded-tr-none' 
+                  isMe
+                    ? 'bg-zinc-900 text-white rounded-tr-none'
                     : 'bg-zinc-100 text-zinc-900 rounded-tl-none'
                 }`}>
-                  {msg.text}
+                  {msg.content}
                 </div>
               </div>
             );

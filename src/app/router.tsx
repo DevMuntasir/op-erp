@@ -25,7 +25,7 @@ const ClientPortal = lazy(() => import('@/src/components/clients/ClientPortal').
 
 // Lazy load other components
 const SessionHistory = lazy(() => import('@/src/components/employees/SessionHistory').then(m => ({ default: m.SessionHistory })));
-const BillingManagement = lazy(() => import('@/src/components/billing/BillingManagement').then(m => ({ default: m.BillingManagement })));
+const BillingManagement = lazy(() => import('@/src/components/billing/BillingManagement'));
 const LeadManagement = lazy(() => import('@/src/components/leads/LeadManagement').then(m => ({ default: m.LeadManagement })));
 const LeadFinder = lazy(() => import('@/src/components/leads/LeadFinder').then(m => ({ default: m.LeadFinder })));
 const ProjectManagement = lazy(() => import('@/src/components/projects/ProjectManagement').then(m => ({ default: m.ProjectManagement })));
@@ -40,6 +40,10 @@ const ProposalPreview = lazy(() => import('@/src/components/proposals/ProposalPr
 const ChatSystem = lazy(() => import('@/src/components/communication/ChatSystem').then(m => ({ default: m.ChatSystem })));
 const CallHistory = lazy(() => import('@/src/components/calls/CallHistory').then(m => ({ default: m.CallHistory })));
 const AdminManagement = lazy(() => import('@/src/components/admins/AdminManagement').then(m => ({ default: m.AdminManagement })));
+const DeleteRequests = lazy(() => import('@/src/components/admins/DeleteRequests').then(m => ({ default: m.DeleteRequests })));
+
+// Lazy load public pages
+const DeleteAccountRequestPage = lazy(() => import('@/src/features/auth/DeleteAccountRequestPage').then(m => ({ default: m.DeleteAccountRequestPage })));
 
 const RouteLoader = () => (
   <div className="flex items-center justify-center min-h-screen">
@@ -73,6 +77,7 @@ function AdminArea() {
           <Route path="proposals/preview/:id" element={<ProposalPreview />} />
           <Route path="messages" element={<ChatSystem />} />
           <Route path="calls" element={<CallHistory />} />
+          <Route path="delete-requests" element={<DeleteRequests />} />
           <Route path="profile" element={<ProfilePage />} />
         </Routes>
       </Suspense>
@@ -152,6 +157,7 @@ function SuperAdminArea() {
           <Route path="messages" element={<ChatSystem />} />
           <Route path="calls" element={<CallHistory />} />
           <Route path="admins" element={<AdminManagement />} />
+          <Route path="delete-requests" element={<DeleteRequests />} />
           <Route path="profile" element={<ProfilePage />} />
         </Routes>
       </Suspense>
@@ -165,6 +171,23 @@ export function AppRouter() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/invite/:token" element={<InvitePage />} />
+        <Route
+          path="/delete-request"
+          element={
+            <Suspense fallback={<RouteLoader />}>
+              <DeleteAccountRequestPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/delete-request/:id"
+          element={
+            <Suspense fallback={<RouteLoader />}>
+              <DeleteAccountRequestPage />
+            </Suspense>
+          }
+        />
+
         <Route element={<ProtectedRoute roles={['admin']} />}>
           <Route path="/admin/*" element={<AdminArea />} />
         </Route>

@@ -133,7 +133,7 @@ export const ProposalBuilder = () => {
         await patchApiData(`/v1/proposals/${id}`, proposalData);
         toast.success("Proposal updated");
       } else {
-        const response = await postApiData('/v1/proposals/', {
+        const response = await postApiData<{ id: string }>('/v1/proposals/', {
           ...proposalData,
           createdAt: new Date().toISOString()
         });

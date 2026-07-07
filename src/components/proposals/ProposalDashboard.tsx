@@ -1,6 +1,6 @@
 import React from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { getProposalSummary, listProposals } from '@/src/api/endpoints/proposals.api';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { deleteProposal, getProposalSummary, listProposals } from '@/src/api/endpoints/proposals.api';
 import { queryKeys } from '@/src/shared/constants/query-keys';
 import { useAuth } from '@/src/App';
 import { Proposal } from '@/src/types';
@@ -10,8 +10,9 @@ import { Badge } from '@/components/ui/badge';
 import {
   FileText, Plus, Search, ChevronRight,
   Users, BarChart3, TrendingUp, Calendar,
-  ArrowUpRight, Clock, Star, Layout
+  ArrowUpRight, Clock, Star, Layout, Trash2
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { motion } from 'motion/react';
@@ -21,6 +22,7 @@ import { ToolbarContent } from '@/src/components/proposals/ProposalToolbar';
 export const ProposalDashboard = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   const isSuperAdmin = user?.role === 'super_admin';
   const basePath = isSuperAdmin || user?.role === 'admin' ? '/admin' : '/employee';
@@ -38,6 +40,24 @@ export const ProposalDashboard = () => {
     enabled: !!user,
     refetchInterval: 30_000,
   });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteProposal,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.proposals() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.proposalSummary });
+      toast.success('Proposal deleted');
+    },
+    onError: (error: Error) => {
+      toast.error('Delete failed', { description: error.message });
+    },
+  });
+
+  const handleDelete = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    if (!confirm('Are you sure you want to delete this proposal?')) return;
+    deleteMutation.mutate(id);
+  };
 
   const summary = summaryQuery.data;
   const proposals = proposalsQuery.data ?? [];
@@ -138,6 +158,15 @@ export const ProposalDashboard = () => {
                             {p.status}
                           </Badge>
                         </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={(e) => handleDelete(e, p.id)}
+                          disabled={deleteMutation.isPending && deleteMutation.variables === p.id}
+                          className="h-8 w-8 text-zinc-300 opacity-0 group-hover:opacity-100 hover:text-rose-600 hover:bg-rose-50 transition-all"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
                         <ChevronRight className="w-4 h-4 text-zinc-300 group-hover:text-brand transition-colors" />
                       </div>
                     </motion.div>

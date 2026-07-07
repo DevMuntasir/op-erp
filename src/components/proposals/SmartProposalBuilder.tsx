@@ -111,7 +111,9 @@ export const SmartProposalBuilder = () => {
         pricingPlans: data.pricingPlans,
       }),
     onSuccess: (result) => {
-      updateFormData({ sections: result.sections });
+      updateFormData({
+        sections: result.sections.map((section) => ({ ...section, type: section.type ?? 'custom' })),
+      });
       toast.success('AI Proposal Generated!');
       setCurrentStep(4);
     },

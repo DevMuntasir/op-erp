@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '@/src/App';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { updateEmployee } from '@/src/api/endpoints/employees.api';
+import { deleteMyAccount } from '@/src/api/endpoints/auth.api';
+import { ConfirmDialog } from '@/src/components/shared/dialogs/ConfirmDialog';
 import { queryKeys } from '@/src/shared/constants/query-keys';
 import { User } from '@/src/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -11,12 +13,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { toast } from 'sonner';
-import { User as UserIcon, Mail, Phone, Shield, Save, Loader2 } from 'lucide-react';
+import { User as UserIcon, Mail, Phone, Shield, Save, Loader2, Trash2 } from 'lucide-react';
 
 export const ProfilePage = () => {
-  const { user: authUser, refreshUser } = useAuth();
+  const { user: authUser, refreshUser, logout } = useAuth();
   const queryClient = useQueryClient();
   const [user, setUser] = useState<User | null>(authUser);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     phoneNumber: '',
@@ -44,6 +47,7 @@ export const ProfilePage = () => {
         photoURL: formData.photoURL,
       });
     },
+    // cs
     onSuccess: async () => {
       await refreshUser();
       queryClient.invalidateQueries({ queryKey: queryKeys.me });
@@ -51,6 +55,18 @@ export const ProfilePage = () => {
     },
     onError: (error: Error) => {
       toast.error('Failed to update profile', { description: error.message });
+    },
+  });
+
+  const deleteAccountMutation = useMutation({
+    mutationFn: deleteMyAccount,
+    onSuccess: async () => {
+      setIsDeleteDialogOpen(false);
+      toast.success('Your account has been deleted');
+      await logout();
+    },
+    onError: (error: Error) => {
+      toast.error('Failed to delete account', { description: error.message });
     },
   });
 
@@ -159,6 +175,41 @@ export const ProfilePage = () => {
             </form>
           </CardContent>
         </Card>
+
+        <Card className="border-rose-200 shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-lg text-rose-600">Danger Zone</CardTitle>
+            <CardDescription>Irreversible actions for your account.</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-medium text-zinc-900">Delete account</p>
+              <p className="mt-1 text-xs text-zinc-500">
+                Your account will be deactivated and you will be signed out immediately.
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="destructive"
+              className="gap-2 bg-rose-600 text-white hover:bg-rose-700"
+              onClick={() => setIsDeleteDialogOpen(true)}
+              disabled={deleteAccountMutation.isPending}
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete Account
+            </Button>
+          </CardContent>
+        </Card>
+
+        <ConfirmDialog
+          isOpen={isDeleteDialogOpen}
+          onClose={() => setIsDeleteDialogOpen(false)}
+          onConfirm={() => deleteAccountMutation.mutate()}
+          title="Delete Account"
+          description={`Are you sure you want to delete your account${user.email ? ` (${user.email})` : ''}? You will be signed out and will no longer be able to log in.`}
+          confirmText="Delete My Account"
+          isLoading={deleteAccountMutation.isPending}
+        />
 
         {user.role === 'admin' && (
           <div className="rounded-xl border border-amber-100 bg-amber-50 p-4">

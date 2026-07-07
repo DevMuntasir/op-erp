@@ -36,10 +36,10 @@ class PerformanceMonitor {
     try {
       const lcpObserver = new PerformanceObserver((entryList) => {
         const entries = entryList.getEntries();
-        const lastEntry = entries[entries.length - 1];
+        const lastEntry = entries[entries.length - 1] as PerformanceEntry & { renderTime?: number; loadTime?: number };
         this.recordMetric({
           name: 'LCP',
-          value: lastEntry.renderTime || lastEntry.loadTime,
+          value: lastEntry.renderTime || lastEntry.loadTime || 0,
           unit: 'ms',
         });
       });

@@ -9,6 +9,7 @@ import { listScreenshots } from '@/src/api/endpoints/screenshots.api';
 import { listInvoices } from '@/src/api/endpoints/invoices.api';
 import { listProjects } from '@/src/api/endpoints/projects.api';
 import { listLeads } from '@/src/api/endpoints/leads.api';
+import { listReports } from '@/src/api/endpoints/reports.api';
 import { queryKeys } from '@/src/shared/constants/query-keys';
 
 /**
@@ -195,6 +196,28 @@ export const useLeads = (filters?: unknown, config: QueryConfig = {}) => {
     refetchOnWindowFocus,
     refetchInterval,
     staleTime: 60_000,
+  });
+};
+
+/**
+ * Hook for fetching reports
+ * Used by: ReportGenerator
+ */
+export const useReports = (filters?: unknown, config: QueryConfig = {}) => {
+  const { user } = useAuth();
+  const {
+    enabled = !!user,
+    refetchOnWindowFocus = false,
+    refetchInterval = 60_000,
+  } = config;
+
+  return useQuery({
+    queryKey: queryKeys.reports(filters),
+    queryFn: listReports,
+    enabled,
+    refetchOnWindowFocus,
+    refetchInterval,
+    staleTime: 30_000,
   });
 };
 

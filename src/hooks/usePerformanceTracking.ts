@@ -93,12 +93,13 @@ export function useListPerformance(
  */
 export function useMemoryTracking(componentName: string) {
   useEffect(() => {
+    const perf = performance as Performance & { memory?: { usedJSHeapSize: number; jsHeapSizeLimit: number } };
     if (
-      performance.memory &&
+      perf.memory &&
       process.env.NODE_ENV === 'development'
     ) {
       const trackMemory = () => {
-        const { usedJSHeapSize, jsHeapSizeLimit } = performance.memory;
+        const { usedJSHeapSize, jsHeapSizeLimit } = perf.memory!;
         const usagePercent = (usedJSHeapSize / jsHeapSizeLimit) * 100;
 
         if (usagePercent > 90) {

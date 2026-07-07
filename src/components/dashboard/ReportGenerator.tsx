@@ -387,7 +387,7 @@ export const ReportGenerator: React.FC = () => {
       return;
     }
 
-    if (!auth.currentUser || !userData) {
+    if (!userData) {
       toast.error('Session not initialized. Please wait.');
       return;
     }
@@ -420,15 +420,15 @@ export const ReportGenerator: React.FC = () => {
         content: result,
         images: images.map(img => `data:${img.mimeType};base64,${img.data}`),
         status: finalStatus,
-        adminId: userData.role === 'employee' ? userData.adminId : (userData.uid || auth.currentUser.uid),
-        updatedAt: serverTimestamp(),
+        adminId: userData.role === 'employee' ? userData.adminId : userData.uid,
+        updatedAt: new Date().toISOString(),
         sentToClient: !!normalizedClientEmail, // Automatically "send" if client is known
-        sentAt: normalizedClientEmail ? serverTimestamp() : null
+        sentAt: normalizedClientEmail ? new Date().toISOString() : null
       };
 
       if (!editingReportId) {
-        reportData.createdBy = auth.currentUser.uid;
-        reportData.createdAt = serverTimestamp();
+        reportData.createdBy = userData.uid;
+        reportData.createdAt = new Date().toISOString();
       }
 
       try {
@@ -445,7 +445,7 @@ export const ReportGenerator: React.FC = () => {
         if (editingReportId) {
           await patchApiData(`/v1/reports/${editingReportId}`, reportPayload);
         } else {
-          const response = await postApiData('/v1/reports/', reportPayload);
+          const response = await postApiData<{ id: string }>('/v1/reports/', reportPayload);
           finalReportId = response.id || editingReportId;
         }
 
@@ -902,34 +902,16 @@ export const ReportGenerator: React.FC = () => {
                               
                               try {
                                 const normalizedEmail = email.toLowerCase().trim();
-                                const qAdminId = userData.role === 'employee' ? userData.adminId : (userData.uid || auth.currentUser.uid);
 
-                                await updateDoc(doc(db, 'reports', selectedReport.id), {
+                                await patchApiData(`/v1/reports/${selectedReport.id}`, {
                                   sentToClient: true,
                                   clientEmail: normalizedEmail,
-                                  sentAt: serverTimestamp()
+                                  sentAt: new Date().toISOString()
                                 });
 
-                                // INTERNAL DELIVERY SYSTEM: Create Notification
-                                const clientsQuery = query(
-                                  collection(db, 'users'), 
-                                  where('email', '==', normalizedEmail),
-                                  where('adminId', '==', qAdminId)
-                                );
-                                
-                                const clientSnap = await getDocs(clientsQuery);
-                                if (!clientSnap.empty) {
-                                  const clientUid = clientSnap.docs[0].id; // This is the ID used in users collection
-                                  await addDoc(collection(db, 'notifications'), {
-                                    userId: clientUid, 
-                                    title: "New Report Delivered",
-                                    message: `A new report for project "${selectedReport.projectName}" is available in your portal.`,
-                                    type: "report",
-                                    relatedId: selectedReport.id,
-                                    read: false,
-                                    adminId: qAdminId,
-                                    createdAt: serverTimestamp()
-                                  });
+                                // Server handles the in-portal notification automatically via API
+                                if (client?.id) {
+                                  await postApiData(`/v1/reports/${selectedReport.id}/send`, { clientIds: [client.id] });
                                 }
 
                                 // Call Server Delivery API for Email/Logs

@@ -61,7 +61,7 @@ export const LeadFinder = () => {
   const createMutation = useMutation({
     mutationFn: createLead,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.leads({ scope: user?.role ?? 'anonymous' }) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.leads() });
       toast.success('Lead added successfully');
       setLeadToAdd(null);
       setForm(initialFormState());

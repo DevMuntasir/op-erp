@@ -5,6 +5,10 @@ export function listEmployees() {
   return getApiData<User[]>('/v1/admin/employees/');
 }
 
+export function getEmployee(uid: string) {
+  return getApiData<User>(`/v1/admin/employees/${uid}`);
+}
+
 export function updateEmployee(
   uid: string,
   body: Partial<Pick<User, 'name' | 'phone' | 'phoneNumber' | 'photoURL' | 'status' | 'role'>>,
@@ -24,6 +28,12 @@ export function listInvites() {
   return getApiData<Invite[]>('/v1/admin/invites/');
 }
 
-export function createInvite(body: { email: string; role?: 'employee' | 'admin' }) {
+export function createInvite(body: {
+  email: string;
+  role?: 'employee' | 'admin';
+  type?: 'password' | 'invitation';
+  password?: string;
+  name?: string;
+}) {
   return postApiData<Invite, typeof body>('/v1/admin/invites/', body);
 }
