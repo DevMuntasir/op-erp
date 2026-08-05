@@ -9,8 +9,21 @@ import { initializeApp, getApps } from "firebase-admin/app";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { getAuth } from "firebase-admin/auth";
 import Stripe from 'stripe';
+import { GoogleGenAI } from "@google/genai";
 
 // Firebase Admin logic is used for backend tasks
+
+let geminiInstance: GoogleGenAI | null = null;
+function getGemini() {
+  if (!geminiInstance) {
+    const key = process.env.GEMINI_API_KEY;
+    if (!key || key.length < 10) {
+      throw new Error('GEMINI_API_KEY environment variable is required on the server');
+    }
+    geminiInstance = new GoogleGenAI({ apiKey: key });
+  }
+  return geminiInstance;
+}
 
 let stripeInstance: Stripe | null = null;
 function getStripe() {
@@ -298,17 +311,6 @@ async function startServer() {
     try {
       const decodedToken = await authAdmin.verifyIdToken(token);
       const uid = decodedToken.uid;
-      const email = decodedToken.email?.toLowerCase();
-      
-      console.log(`[Admin SDK] Verifying admin status for UID: ${uid} (Email: ${email})`);
-      
-      // Hardcoded fallback for the primary developer
-      const developerEmail = "wpnajmul@gmail.com";
-      if (email === developerEmail) {
-        console.log(`[Admin SDK] Access GRANTED via Developer Fallback: ${email}`);
-        req.admin = { uid: uid, role: "super_admin", email: email };
-        return next();
-      }
 
       // Try to find the user in 'users' or 'profiles' in both named and default databases
       let userData: any = null;
@@ -354,6 +356,60 @@ async function startServer() {
       res.status(401).json({ error: "Invalid or expired token", details: error.message });
     }
   };
+
+  // Middleware to verify any authenticated Firebase user (no role requirement)
+  const verifyUser = async (req: AdminRequest, res: core.Response, next: core.NextFunction) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "Unauthorized: No token provided" });
+    }
+    try {
+      const decodedToken = await authAdmin.verifyIdToken(authHeader.split("Bearer ")[1]);
+      req.admin = { uid: decodedToken.uid, role: "user", email: decodedToken.email };
+      next();
+    } catch (error: any) {
+      res.status(401).json({ error: "Invalid or expired token", details: error.message });
+    }
+  };
+
+  // AI proxy: keeps the Gemini API key server-side. Consumed by src/lib/aiProxy.ts.
+  app.post("/api/ai/generate", verifyUser as any, async (req: AdminRequest, res: core.Response) => {
+    const { model, prompt, images, responseSchema } = req.body ?? {};
+
+    if (typeof prompt !== "string" || !prompt.trim()) {
+      return res.status(400).json({ error: "Missing prompt" });
+    }
+    const requestedModel = typeof model === "string" ? model : "gemini-flash-latest";
+    if (!/^gemini-[a-z0-9.-]+$/i.test(requestedModel)) {
+      return res.status(400).json({ error: "Invalid model" });
+    }
+
+    try {
+      const parts: any[] = [];
+      if (Array.isArray(images)) {
+        for (const img of images.slice(0, 20)) {
+          if (img && typeof img.data === "string" && typeof img.mimeType === "string") {
+            parts.push({ inlineData: { data: img.data, mimeType: img.mimeType } });
+          }
+        }
+      }
+      parts.push({ text: prompt });
+
+      const response = await getGemini().models.generateContent({
+        model: requestedModel,
+        contents: [{ role: "user", parts }],
+        ...(responseSchema
+          ? { config: { responseMimeType: "application/json", responseSchema } }
+          : {}),
+      });
+
+      res.json({ text: response.text ?? "" });
+    } catch (error: any) {
+      console.error("[AI Proxy] Generation failed:", error.message);
+      const status = error.message?.includes("413") ? 413 : 500;
+      res.status(status).json({ error: error.message || "AI generation failed" });
+    }
+  });
 
   // Stripe: Create Subscription Checkout
   app.post("/api/stripe/create-subscription", async (req, res) => {
@@ -405,8 +461,6 @@ async function startServer() {
     const results: any = {};
     // ... rest of the code ...
   });
-
-  // --- GEMINI AI Logic has been moved to frontend (geminiService.ts) ---
 
   // API Route: Deliver Report to Client
   app.post("/api/deliver-report", async (req: core.Request, res: core.Response) => {
@@ -542,6 +596,118 @@ async function startServer() {
       }
       
       res.status(500).json({ error: error.message || "Failed to update password" });
+    }
+  });
+
+  // API Route: Admin - delete an admin (soft delete + disable auth)
+  app.delete('/v1/admin/admins/:uid', verifyAdmin as any, async (req: AdminRequest, res: core.Response) => {
+    const requestId = randomUUID();
+    try {
+      const { uid } = req.params;
+      if (!uid) {
+        return res.status(400).json({
+          success: false,
+          error: { message: 'Missing uid parameter', code: 'MISSING_UID' },
+          meta: { requestId },
+        });
+      }
+
+      // Prevent deleting yourself via this endpoint
+      if (req.admin?.uid === uid) {
+        return res.status(403).json({
+          success: false,
+          error: { message: 'You cannot delete your own account via this endpoint', code: 'CANNOT_DELETE_SELF' },
+          meta: { requestId },
+        });
+      }
+
+      // Find the target user record (users or profiles)
+      let targetData: any = null;
+      for (const col of ['users', 'profiles']) {
+        try {
+          const snap = await dbAdmin.collection(col).doc(uid).get();
+          if (snap.exists) {
+            targetData = snap.data();
+            break;
+          }
+        } catch (e: any) {
+          // continue searching other collections
+        }
+      }
+
+      if (!targetData) {
+        return res.status(404).json({
+          success: false,
+          error: { message: 'Admin user not found', code: 'NOT_FOUND' },
+          meta: { requestId },
+        });
+      }
+
+      // Do not allow removing another super_admin
+      if (targetData.role === 'super_admin') {
+        return res.status(403).json({
+          success: false,
+          error: { message: 'Cannot delete a super_admin account', code: 'FORBIDDEN' },
+          meta: { requestId },
+        });
+      }
+
+      const deletedAt = new Date().toISOString();
+
+      // Soft-delete records in both collections
+      for (const col of ['users', 'profiles']) {
+        try {
+          const ref = dbAdmin.collection(col).doc(uid);
+          const snap = await ref.get();
+          if (snap.exists) {
+            await ref.set(
+              {
+                isDeleted: true,
+                deletedAt,
+                isDisabled: true,
+                disabledAt: deletedAt,
+                status: 'offline',
+              },
+              { merge: true },
+            );
+          }
+        } catch (e: any) {
+          console.warn(`[Admin Delete] Failed to update ${col} for ${uid}:`, e.message);
+        }
+      }
+
+      // Disable the auth user and revoke tokens
+      try {
+        await authAdmin.updateUser(uid, { disabled: true });
+        await authAdmin.revokeRefreshTokens(uid);
+      } catch (error: any) {
+        // If Identity Toolkit API is not enabled, surface a helpful error as elsewhere in the server
+        if (error.message?.includes('identitytoolkit.googleapis.com') || error.code === 'auth/internal-error') {
+          const targetProjectId = firebaseConfig.projectId;
+          console.error(`[Admin Auth] Identity Toolkit failure while deleting ${uid}: ${error.message}`);
+          return res.status(500).json({
+            success: false,
+            error: {
+              message: 'Identity Toolkit API Issue',
+              code: 'IDENTITY_TOOLKIT_ERROR',
+              details: `The Identity Toolkit API must be enabled for project: ${targetProjectId}.`,
+            },
+            meta: { requestId },
+          });
+        }
+        console.warn(`[Admin Delete] Failed to disable auth user ${uid}:`, error.message);
+      }
+
+      console.log(`[Admin Delete] Admin ${uid} soft-deleted by ${req.admin?.uid}`);
+
+      res.json({ success: true, data: { uid, deletedAt }, meta: { requestId } });
+    } catch (error: any) {
+      console.error('[DELETE /v1/admin/admins/:uid] Error:', error.message);
+      res.status(500).json({
+        success: false,
+        error: { message: error.message || 'Failed to delete admin', code: 'INTERNAL_ERROR' },
+        meta: { requestId },
+      });
     }
   });
 

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { inviteAdmin, listAdmins } from '@/src/api/endpoints/admins.api';
+import { inviteAdmin, listAdmins, deleteAdmin } from '@/src/api/endpoints/admins.api';
+import { useAuth } from '@/src/features/auth/AuthProvider';
 import { queryKeys } from '@/src/shared/constants/query-keys';
 import { User } from '@/src/shared/types/domain';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -11,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Search, ShieldCheck, UserPlus } from 'lucide-react';
+import { Search, ShieldCheck, UserPlus, Trash } from 'lucide-react';
 import { toast } from 'sonner';
 
 export function AdminManagement() {
@@ -41,6 +42,20 @@ export function AdminManagement() {
     },
     onError: (error: Error) => {
       toast.error('Failed to invite admin', { description: error.message });
+    },
+  });
+
+  const { user } = useAuth();
+  const isSuperAdmin = user?.role === 'super_admin';
+
+  const deleteMutation = useMutation({
+    mutationFn: (uid: string) => deleteAdmin(uid),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.admins });
+      toast.success('Admin deleted');
+    },
+    onError: (error: Error) => {
+      toast.error('Failed to delete admin', { description: error.message });
     },
   });
 
@@ -175,12 +190,13 @@ export function AdminManagement() {
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead className="min-w-[260px]">Admin</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Created At</TableHead>
-                </TableRow>
+                  <TableRow>
+                    <TableHead className="min-w-[260px]">Admin</TableHead>
+                    <TableHead>Role</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Created At</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
               </TableHeader>
               <TableBody>
                 {rows.map((admin) => (
@@ -208,6 +224,25 @@ export function AdminManagement() {
                     </TableCell>
                     <TableCell className="text-sm text-zinc-500">
                       {admin.createdAt ? new Date(admin.createdAt).toLocaleString() : '-'}
+                    </TableCell>
+                    <TableCell className="text-sm text-zinc-500">
+                      {isSuperAdmin && admin.role !== 'super_admin' ? (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-rose-600"
+                          onClick={async () => {
+                            const ok = window.confirm(`Delete admin ${admin.email ?? admin.name}? This action cannot be undone.`);
+                            if (!ok) return;
+                            await deleteMutation.mutateAsync(admin.uid);
+                          }}
+                          disabled={deleteMutation.isLoading}
+                        >
+                          <Trash className="h-4 w-4" />
+                        </Button>
+                      ) : (
+                        <span className="text-zinc-400 text-sm">—</span>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}

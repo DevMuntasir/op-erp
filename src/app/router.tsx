@@ -4,7 +4,9 @@ import { LoginPage } from '@/src/features/auth/LoginPage';
 import { InvitePage } from '@/src/features/auth/InvitePage';
 import { ProtectedRoute, RootRedirect } from '@/src/features/auth/route-guards';
 import { AppLayout } from '@/src/components/layout';
-import { ProfilePage } from '@/src/components/profile';
+import { NotFound } from '@/src/components/shared/NotFound';
+
+const ProfilePage = lazy(() => import('@/src/components/profile').then(m => ({ default: m.ProfilePage })));
 
 // Lazy load dashboard components
 const DashboardOverview = lazy(() => import('@/src/components/dashboard/DashboardOverview').then(m => ({ default: m.DashboardOverview })));
@@ -79,6 +81,7 @@ function AdminArea() {
           <Route path="calls" element={<CallHistory />} />
           <Route path="delete-requests" element={<DeleteRequests />} />
           <Route path="profile" element={<ProfilePage />} />
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </Suspense>
     </AppLayout>
@@ -106,6 +109,7 @@ function EmployeeArea() {
           <Route path="messages" element={<ChatSystem />} />
           <Route path="calls" element={<CallHistory />} />
           <Route path="profile" element={<ProfilePage />} />
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </Suspense>
     </AppLayout>
@@ -124,6 +128,7 @@ function ClientArea() {
           <Route path="reports" element={<ReportsManagement />} />
           <Route path="billing" element={<BillingManagement />} />
           <Route path="profile" element={<ProfilePage />} />
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </Suspense>
     </AppLayout>
@@ -159,6 +164,7 @@ function SuperAdminArea() {
           <Route path="admins" element={<AdminManagement />} />
           <Route path="delete-requests" element={<DeleteRequests />} />
           <Route path="profile" element={<ProfilePage />} />
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </Suspense>
     </AppLayout>
@@ -201,6 +207,7 @@ export function AppRouter() {
           <Route path="/client/*" element={<ClientArea />} />
         </Route>
         <Route path="/" element={<RootRedirect />} />
+        <Route path="*" element={<NotFound />} />
       </Routes>
     </BrowserRouter>
   );

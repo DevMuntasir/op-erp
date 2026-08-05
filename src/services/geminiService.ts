@@ -1,9 +1,7 @@
 import { Proposal } from "../types";
-import { GoogleGenAI } from "@google/genai";
+import { generateAiContent } from "@/src/lib/aiProxy";
 
-// Initialize Gemini on the client
-// In AI Studio, the platform injects this into the build environment
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+// All Gemini calls go through the server-side proxy so the API key never ships to the browser.
 const GEMINI_MODEL = "gemini-3-flash-preview";
 
 export async function generateSmartProposalContent(
@@ -54,12 +52,9 @@ export async function generateSmartProposalContent(
         break;
     }
 
-    const response = await ai.models.generateContent({
-      model: GEMINI_MODEL,
-      contents: prompt
-    });
+    const text = await generateAiContent({ prompt, model: GEMINI_MODEL });
 
-    return response.text || "Failed to generate content.";
+    return text || "Failed to generate content.";
   } catch (error) {
     console.error("Gemini SDK Error:", error);
     return "AI generation is currently unavailable. Please try manual entry.";
@@ -93,12 +88,9 @@ export async function generateProposalSection(
         prompt = `Write content for a digital marketing proposal section about "${sectionType}" for client "${clientName}".`;
     }
 
-    const response = await ai.models.generateContent({
-      model: GEMINI_MODEL,
-      contents: prompt
-    });
+    const text = await generateAiContent({ prompt, model: GEMINI_MODEL });
 
-    return response.text || "Failed to generate content.";
+    return text || "Failed to generate content.";
   } catch (error) {
     console.error("Gemini SDK Error:", error);
     return "AI generation is currently unavailable. Please try manual entry.";
@@ -109,12 +101,9 @@ export async function suggestProposalTitle(clientName: string, businessDescripti
   try {
     const prompt = `Suggest 3 professional and catchy titles for a digital marketing proposal for "${clientName}". Business context: "${businessDescription}". Return only the best one as a plain string.`;
     
-    const response = await ai.models.generateContent({
-      model: GEMINI_MODEL,
-      contents: prompt
-    });
+    const text = await generateAiContent({ prompt, model: GEMINI_MODEL });
 
-    return response.text?.trim().replace(/^"|"$/g, '') || `Digital Marketing Proposal: ${clientName}`;
+    return text?.trim().replace(/^"|"$/g, '') || `Digital Marketing Proposal: ${clientName}`;
   } catch (error) {
     return `Digital Marketing Proposal: ${clientName}`;
   }
@@ -177,19 +166,9 @@ export async function generateClientReport(
       *A 3-line summary perfect for a quick update.*
     `;
 
-    const imageParts = images.map((img: any) => ({
-      inlineData: {
-        data: img.data,
-        mimeType: img.mimeType
-      }
-    }));
+    const text = await generateAiContent({ prompt: fullPrompt, model: GEMINI_MODEL, images });
 
-    const response = await ai.models.generateContent({
-      model: GEMINI_MODEL,
-      contents: { parts: [...imageParts, { text: fullPrompt }] }
-    });
-
-    return response.text || "Failed to generate report.";
+    return text || "Failed to generate report.";
   } catch (error: any) {
     console.error("Gemini SDK Error:", error);
     if (error.message?.includes('413')) {

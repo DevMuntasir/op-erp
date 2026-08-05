@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { GoogleAuthProvider, User as FirebaseUser, getRedirectResult, onAuthStateChanged, signInWithEmailAndPassword, signOut, signInWithPopup } from 'firebase/auth';
+import { GoogleAuthProvider, User as FirebaseUser, onAuthStateChanged, signInWithEmailAndPassword, signOut, signInWithPopup } from 'firebase/auth';
 import { collection, doc, getDoc, getDocs, limit, query, where } from 'firebase/firestore';
 import { acceptInvite, getCurrentUser } from '@/src/api/endpoints/auth.api';
 import { auth, db } from '@/src/lib/firebase';
@@ -18,7 +18,7 @@ interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
-const REDIRECT_IN_PROGRESS_KEY = 'opm_google_redirect_in_progress';
+const INVITE_TOKEN_KEY = 'op_media_invite_token';
 
 export function useAuth() {
   const context = useContext(AuthContext);
@@ -95,63 +95,57 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
     } catch (error) {
       const fallbackUser = await getFirestoreFallbackUser(source);
-      setUser(fallbackUser);
+      // On a transient API failure, keep the last-known role for the same account
+      // instead of silently downgrading to the fallback's default 'client' role.
+      setUser((prev) => (prev && prev.uid === fallbackUser?.uid ? prev : fallbackUser));
       throw error;
+    }
+  };
+
+  // If the user arrived via an invite link (InvitePage stores the token),
+  // redeem it right after sign-in so their account gets linked to the invitation.
+  const redeemPendingInvite = async () => {
+    const token = localStorage.getItem(INVITE_TOKEN_KEY);
+    if (!token) return;
+    try {
+      await acceptInvite(token.trim());
+      localStorage.removeItem(INVITE_TOKEN_KEY);
+      toast.success('Invitation accepted', { description: 'Your account has been linked to the workspace.' });
+    } catch (error: any) {
+      localStorage.removeItem(INVITE_TOKEN_KEY);
+      toast.error('Could not accept the invitation', {
+        description: error?.message || 'The invite link may be invalid or expired. Ask your admin to resend it.',
+      });
     }
   };
 
   useEffect(() => {
     let isMounted = true;
 
-    const bootstrapAuth = async () => {
-      const redirectPending = localStorage.getItem(REDIRECT_IN_PROGRESS_KEY) === '1';
+    const unsubscribe = onAuthStateChanged(auth, async (nextUser) => {
+      if (!isMounted) return;
+      setFirebaseUser(nextUser);
 
-      try {
-        const redirectResult = await getRedirectResult(auth);
-        if (redirectResult?.user) {
-          console.log('Google redirect resolved for:', redirectResult.user.email);
-        }
-      } catch (error: any) {
-        if (redirectPending) {
-          console.error('Google redirect result failed', error);
-          toast.error('Google sign-in failed', {
-            description: error?.message || 'Unable to complete Google authentication.',
-          });
-        }
-      } finally {
-        localStorage.removeItem(REDIRECT_IN_PROGRESS_KEY);
+      if (!nextUser) {
+        setUser(null);
+        setLoading(false);
+        return;
       }
 
-      const unsubscribe = onAuthStateChanged(auth, async (nextUser) => {
-        if (!isMounted) return;
-        setFirebaseUser(nextUser);
+      await redeemPendingInvite();
 
-        if (!nextUser) {
-          setUser(null);
-          setLoading(false);
-          return;
-        }
-
-        try {
-          await refreshUser(nextUser);
-        } catch (error: any) {
-          console.error('Auth bootstrap fell back after API failure', error);
-        } finally {
-          setLoading(false);
-        }
-      });
-
-      return unsubscribe;
-    };
-
-    let unsubscribe: (() => void) | undefined;
-    bootstrapAuth().then((cleanup) => {
-      unsubscribe = cleanup;
+      try {
+        await refreshUser(nextUser);
+      } catch (error: any) {
+        console.error('Auth bootstrap fell back after API failure', error);
+      } finally {
+        setLoading(false);
+      }
     });
 
     return () => {
       isMounted = false;
-      unsubscribe?.();
+      unsubscribe();
     };
   }, []);
 
@@ -160,9 +154,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     provider.setCustomParameters({
       prompt: 'select_account',
     });
-    localStorage.setItem(REDIRECT_IN_PROGRESS_KEY, '1');
-    console.log('Starting Google auth with redirect flow');
-    // await signInWithRedirect(auth, provider);
     await signInWithPopup(auth, provider);
   };
 

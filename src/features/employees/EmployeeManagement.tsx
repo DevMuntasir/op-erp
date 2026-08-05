@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { createInvite, deleteEmployee, listEmployees, listInvites, updateEmployee } from '@/src/api/endpoints/employees.api';
+import { createInvite, deleteEmployee, listEmployees, updateEmployee } from '@/src/api/endpoints/employees.api';
 import { queryKeys } from '@/src/shared/constants/query-keys';
 import { User, UserRole } from '@/src/shared/types/domain';
 import { useAuth } from '@/src/features/auth/AuthProvider';
@@ -27,7 +27,6 @@ export function EmployeeManagement() {
   const [isAdding, setIsAdding] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [newEmail, setNewEmail] = useState('');
-  const [inviteType, setInviteType] = useState<'password' | 'invitation'>('invitation');
   const [newPassword, setNewPassword] = useState('');
   const [newName, setNewName] = useState('');
   const [deletingUser, setDeletingUser] = useState<StaffRow | null>(null);
@@ -37,24 +36,18 @@ export function EmployeeManagement() {
     queryFn: listEmployees,
   });
 
-  const invitesQuery = useQuery({
-    queryKey: queryKeys.invites,
-    queryFn: listInvites,
-  });
-
   const inviteMutation = useMutation({
     mutationFn: createInvite,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.invites });
+      queryClient.invalidateQueries({ queryKey: queryKeys.employees });
       setIsAdding(false);
       setNewEmail('');
-      setInviteType('invitation');
       setNewPassword('');
       setNewName('');
-      toast.success('Invitation sent successfully');
+      toast.success('Employee created successfully');
     },
     onError: (error: Error) => {
-      toast.error('Failed to send invite', { description: error.message });
+      toast.error('Failed to create employee', { description: error.message });
     },
   });
 
@@ -88,57 +81,21 @@ export function EmployeeManagement() {
         source: 'employee' as const,
       })) ?? [];
 
-    const pendingInviteRows =
-      invitesQuery.data
-        ?.filter((invite) => !invite.acceptedAt)
-        .map(
-          (invite) =>
-            ({
-              uid: invite.id,
-              email: invite.email,
-              name: 'Pending Invite',
-              role: invite.role as UserRole,
-              adminId: invite.adminId,
-              status: 'offline',
-              lastSeen: null,
-              photoURL: null,
-              phone: null,
-              phoneNumber: null,
-              source: 'invite' as const,
-              inviteId: invite.id,
-              acceptedAt: invite.acceptedAt,
-            }) satisfies StaffRow,
-        ) ?? [];
-
-    return [...employeeRows, ...pendingInviteRows].filter((row) => {
+    return employeeRows.filter((row) => {
       const needle = searchTerm.toLowerCase();
       return row.name.toLowerCase().includes(needle) || (row.email ?? '').toLowerCase().includes(needle);
     });
-  }, [employeesQuery.data, invitesQuery.data, searchTerm]);
+  }, [employeesQuery.data, searchTerm]);
 
   const handleSendInvite = async (event: React.FormEvent) => {
     event.preventDefault();
     await inviteMutation.mutateAsync({
       email: newEmail.toLowerCase().trim(),
       role: 'employee',
-      type: inviteType,
-      password: inviteType === 'password' ? newPassword : '',
+      type: 'password',
+      password: newPassword,
       name: newName.trim(),
     });
-  };
-
-  const copyInviteLink = (email: string) => {
-    const link = `${window.location.origin}/login?invite=${encodeURIComponent(email)}`;
-    navigator.clipboard.writeText(link);
-    toast.success('Invite link copied');
-  };
-
-  const sendInviteEmail = (email: string) => {
-    const subject = encodeURIComponent('Invitation to join OP Media CRM');
-    const body = encodeURIComponent(
-      `Hello,\n\nYou have been invited to join the OP Media CRM.\n\nPlease continue with your Google account here: ${window.location.origin}/login\n`,
-    );
-    window.location.href = `mailto:${email}?subject=${subject}&body=${body}`;
   };
 
   return (
@@ -147,7 +104,7 @@ export function EmployeeManagement() {
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
           <div>
             <h2 className="text-2xl font-bold tracking-tight">Employee Management</h2>
-            <p className="text-zinc-500">Manage agency staff, roles, and pending invitations.</p>
+            <p className="text-zinc-500">Manage agency staff and roles.</p>
           </div>
           <Dialog open={isAdding} onOpenChange={setIsAdding}>
             <DialogTrigger
@@ -161,32 +118,11 @@ export function EmployeeManagement() {
             <DialogContent className="overflow-hidden border-zinc-200 p-0 sm:max-w-md">
               <DialogHeader>
                 <div className="border-b border-zinc-200 bg-zinc-50 px-5 py-4">
-                  <DialogTitle className="text-base font-semibold">Invite Employee</DialogTitle>
-                  <p className="mt-1 text-xs text-zinc-500">Create access for your team member.</p>
+                  <DialogTitle className="text-base font-semibold">Create Employee</DialogTitle>
+                  <p className="mt-1 text-xs text-zinc-500">Create a password-based employee account.</p>
                 </div>
               </DialogHeader>
               <form onSubmit={handleSendInvite} className="space-y-4 px-5 py-5">
-                <div className="grid grid-cols-2 gap-2 rounded-lg bg-zinc-100 p-1">
-                  <button
-                    type="button"
-                    onClick={() => setInviteType('invitation')}
-                    className={`rounded-md px-3 py-2 text-sm font-medium transition ${
-                      inviteType === 'invitation' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-600 hover:text-zinc-900'
-                    }`}
-                  >
-                    Invitation
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setInviteType('password')}
-                    className={`rounded-md px-3 py-2 text-sm font-medium transition ${
-                      inviteType === 'password' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-600 hover:text-zinc-900'
-                    }`}
-                  >
-                    Password
-                  </button>
-                </div>
-
                 <div className="space-y-3 rounded-lg border border-zinc-200 p-3">
                   <div className="space-y-1.5">
                     <Label htmlFor="email" className="text-xs uppercase tracking-wide text-zinc-500">
@@ -200,10 +136,7 @@ export function EmployeeManagement() {
                     </Label>
                     <Input id="name" type="text" value={newName} onChange={(e) => setNewName(e.target.value)} required />
                   </div>
-                </div>
-
-                {inviteType === 'password' && (
-                  <div className="space-y-1.5 rounded-lg border border-zinc-200 p-3">
+                  <div className="space-y-1.5">
                     <Label htmlFor="password" className="text-xs uppercase tracking-wide text-zinc-500">
                       Password
                     </Label>
@@ -212,17 +145,17 @@ export function EmployeeManagement() {
                       type="password"
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
-                      required={inviteType === 'password'}
+                      required
                     />
                   </div>
-                )}
+                </div>
 
                 <div className="border-t border-zinc-200 pt-1">
                   <Button type="submit" className="h-10 w-full" disabled={inviteMutation.isPending}>
-                    {inviteMutation.isPending ? 'Processing...' : inviteType === 'password' ? 'Create Account' : 'Send Invitation'}
+                    {inviteMutation.isPending ? 'Processing...' : 'Create Account'}
                   </Button>
                 </div>
-                <input type="hidden" name="type" value={inviteType} />
+                <input type="hidden" name="type" value="password" />
                 <input type="hidden" name="role" value="employee" />
                 <input type="hidden" name="name" value={newName} />
                 <input type="hidden" name="email" value={newEmail} />
@@ -235,7 +168,6 @@ export function EmployeeManagement() {
                     setNewEmail('');
                     setNewName('');
                     setNewPassword('');
-                    setInviteType('invitation');
                   }}
                 >
                   Reset form
@@ -285,37 +217,20 @@ export function EmployeeManagement() {
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      {employee.source === 'invite' ? (
-                        <Badge className="bg-amber-100 text-amber-700">Pending Invite</Badge>
-                      ) : (
-                        <div className="flex items-center gap-2">
-                          <span className={`h-2 w-2 rounded-full ${employee.status === 'online' ? 'bg-emerald-500' : 'bg-zinc-300'}`} />
-                          <span className="text-sm capitalize text-zinc-600">{employee.status}</span>
-                        </div>
-                      )}
+                      <div className="flex items-center gap-2">
+                        <span className={`h-2 w-2 rounded-full ${employee.status === 'online' ? 'bg-emerald-500' : 'bg-zinc-300'}`} />
+                        <span className="text-sm capitalize text-zinc-600">{employee.status}</span>
+                      </div>
                     </TableCell>
-                    
+
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2 items-center">
-                        {employee.source === 'invite' ? (
-                          <>
-                            <Button variant="ghost" size="icon" onClick={() => copyInviteLink(employee.email ?? '')}>
-                              <Copy className="h-4 w-4" />
-                            </Button>
-                            <Button variant="ghost" size="icon" onClick={() => sendInviteEmail(employee.email ?? '')}>
-                              <ExternalLink className="h-4 w-4" />
-                            </Button>
-                          </>
-                        ) : (
-                          <>
-                            <Button size="icon" variant="ghost" onClick={() => navigate(employee.uid)}>
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                            <Button variant="ghost" size="icon" onClick={() => setDeletingUser(employee)}>
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </>
-                        )}
+                        <Button size="icon" variant="ghost" onClick={() => navigate(employee.uid)}>
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => setDeletingUser(employee)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>

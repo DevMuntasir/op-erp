@@ -1,50 +1,41 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Building2, Briefcase, CheckCircle2, ListTodo, Loader2, PlayCircle, Search, UserRound } from 'lucide-react';
-import { listClients } from '@/src/api/endpoints/clients.api';
+import React, { useMemo, useState } from 'react';
+import { Briefcase, CheckCircle2, ListTodo, Loader2, PlayCircle, Receipt, Search } from 'lucide-react';
 import { useAuth } from '@/src/App';
+import { useClients, useInvoices, useTasks } from '@/src/hooks/useApiQueries';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { cn } from '@/src/lib/utils';
-import { Client } from '@/src/shared/types/domain';
+import { cn, formatCurrency } from '@/src/lib/utils';
+import { Client, Invoice, Task } from '@/src/shared/types/domain';
+import { CurrencyCode } from '@/src/types';
 
 type ClientPortalStats = {
   totalProjects: number;
-  runningProjects: number;
-  totalEmployees: number;
   totalTasks: number;
-  runningTasks: number;
+  activeTasks: number;
   completedTasks: number;
+  totalInvoices: number;
+  amountDue: number;
 };
 
-const hashText = (value: string) =>
-  value.split('').reduce((sum, char, index) => sum + char.charCodeAt(0) * (index + 1), 0);
-
-const buildDemoStats = (client: Client): ClientPortalStats => {
-  const base = hashText(client.id || client.email || client.name);
-
-  const totalProjects = (base % 8) + 3;
-  const runningProjects = Math.min(totalProjects, Math.max(1, base % totalProjects));
-  const totalEmployees = (base % 12) + 3;
-  const totalTasks = totalProjects * ((base % 5) + 4);
-  const runningTasks = Math.max(1, Math.floor(totalTasks * 0.4));
-  const completedTasks = Math.max(0, totalTasks - runningTasks);
+const buildStats = (tasks: Task[], invoices: Invoice[]): ClientPortalStats => {
+  const completedTasks = tasks.filter((t) => t.status === 'submitted').length;
+  const unpaid = invoices.filter((inv) => inv.status !== 'paid');
 
   return {
-    totalProjects,
-    runningProjects,
-    totalEmployees,
-    totalTasks,
-    runningTasks,
+    totalProjects: new Set(tasks.map((t) => t.projectId).filter(Boolean)).size,
+    totalTasks: tasks.length,
+    activeTasks: tasks.length - completedTasks,
     completedTasks,
+    totalInvoices: invoices.length,
+    amountDue: unpaid.reduce((sum, inv) => sum + (inv.amount ?? 0), 0),
   };
 };
 
 const StatCard: React.FC<{
   title: string;
-  value: number;
+  value: React.ReactNode;
   subtitle: string;
   icon: React.ReactNode;
 }> = ({ title, value, subtitle, icon }) => (
@@ -62,59 +53,94 @@ const StatCard: React.FC<{
   </Card>
 );
 
+const StatsGrid: React.FC<{ stats: ClientPortalStats; loading: boolean; currency?: CurrencyCode }> = ({ stats, loading, currency }) => {
+  if (loading) {
+    return (
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} className="h-32 animate-pulse rounded-2xl bg-zinc-100" />
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      <StatCard
+        title="Projects"
+        value={stats.totalProjects}
+        subtitle="Projects with tasks under this account"
+        icon={<Briefcase className="h-4 w-4" />}
+      />
+      <StatCard
+        title="Total Tasks"
+        value={stats.totalTasks}
+        subtitle="Tasks across all projects"
+        icon={<ListTodo className="h-4 w-4" />}
+      />
+      <StatCard
+        title="Active Tasks"
+        value={stats.activeTasks}
+        subtitle="Pending or in progress"
+        icon={<PlayCircle className="h-4 w-4" />}
+      />
+      <StatCard
+        title="Completed Tasks"
+        value={stats.completedTasks}
+        subtitle="Delivered and submitted"
+        icon={<CheckCircle2 className="h-4 w-4" />}
+      />
+      <StatCard
+        title="Invoices"
+        value={stats.totalInvoices}
+        subtitle="All invoices issued"
+        icon={<Receipt className="h-4 w-4" />}
+      />
+      <StatCard
+        title="Amount Due"
+        value={formatCurrency(stats.amountDue, currency)}
+        subtitle="Across unpaid invoices"
+        icon={<Receipt className="h-4 w-4" />}
+      />
+    </div>
+  );
+};
+
+const ProfileField: React.FC<{ label: string; value?: string | null; capitalize?: boolean }> = ({ label, value, capitalize }) => {
+  if (!value) return null;
+  return (
+    <div className="rounded-xl bg-zinc-100/70 p-4">
+      <p className="mb-1 text-[11px] uppercase tracking-wider text-zinc-500">{label}</p>
+      <p className={cn('font-semibold text-zinc-900', capitalize && 'capitalize')}>{value}</p>
+    </div>
+  );
+};
+
 export const ClientPortal: React.FC = () => {
   const { user } = useAuth();
 
-  const [clients, setClients] = useState<Client[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string>('');
 
   const isPortalManager = user?.role === 'admin' || user?.role === 'super_admin';
   const isClient = user?.role === 'client';
 
-  useEffect(() => {
-    let isMounted = true;
+  // The backend scopes these lists to the caller's role: a client only receives
+  // their own tasks/invoices, so the same hooks serve both portal views.
+  const tasksQuery = useTasks({}, { refetchInterval: false });
+  const invoicesQuery = useInvoices({}, { refetchInterval: false });
+  const clientsQuery = useClients(undefined, { enabled: isPortalManager, refetchInterval: false });
 
-    const loadClients = async () => {
-      if (!isPortalManager) {
-        setLoading(false);
-        if (isClient && user?.uid) {
-          setSelectedClientId(user.uid);
-        }
-        return;
-      }
-
-      try {
-        setLoading(true);
-        setError('');
-        const data = await listClients();
-
-        if (!isMounted) return;
-
-        setClients(data || []);
-        setSelectedClientId((prev) => prev || data?.[0]?.id || '');
-      } catch (err) {
-        if (!isMounted) return;
-        setError('Failed to load clients. Please try again.');
-      } finally {
-        if (isMounted) setLoading(false);
-      }
-    };
-
-    void loadClients();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [isPortalManager, isClient, user?.uid]);
+  const clients = clientsQuery.data ?? [];
+  const tasks = tasksQuery.data ?? [];
+  const invoices = invoicesQuery.data ?? [];
+  const statsLoading = tasksQuery.isLoading || invoicesQuery.isLoading;
 
   const filteredClients = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
     if (!term) return clients;
 
-    return clients.filter((client) => {
+    return clients.filter((client: Client) => {
       const name = client.name?.toLowerCase() || '';
       const email = client.email?.toLowerCase() || '';
       const company = client.company?.toLowerCase() || '';
@@ -123,24 +149,22 @@ export const ClientPortal: React.FC = () => {
   }, [clients, searchTerm]);
 
   const selectedClient = useMemo(
-    () => clients.find((client) => client.id === selectedClientId) || null,
+    () => clients.find((client: Client) => client.id === selectedClientId) || clients[0] || null,
     [clients, selectedClientId],
   );
 
-  const stats = useMemo(() => (selectedClient ? buildDemoStats(selectedClient) : null), [selectedClient]);
+  const selectedClientStats = useMemo(() => {
+    if (!selectedClient) return null;
+    const clientEmail = selectedClient.email?.toLowerCase();
+    const clientTasks = tasks.filter((t: Task) => t.clientEmail?.toLowerCase() === clientEmail);
+    const clientInvoices = invoices.filter(
+      (inv: Invoice) => inv.clientId === selectedClient.id || inv.clientEmail?.toLowerCase() === clientEmail,
+    );
+    return buildStats(clientTasks, clientInvoices);
+  }, [selectedClient, tasks, invoices]);
 
   if (isClient) {
-    const clientData = {
-      id: user?.uid || '',
-      name: user?.name || 'Client',
-      email: user?.email || '',
-      company: '',
-      website: '',
-      phone: user?.phone || '',
-      status: 'active'
-    };
-
-    const clientStats = buildDemoStats(clientData as Client);
+    const clientStats = buildStats(tasks, invoices);
 
     return (
       <div className="min-h-screen bg-zinc-50 p-4 md:p-6">
@@ -149,8 +173,8 @@ export const ClientPortal: React.FC = () => {
             <CardHeader>
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <CardTitle className="text-3xl font-black tracking-tight">{clientData.name}</CardTitle>
-                  <CardDescription>{clientData.email}</CardDescription>
+                  <CardTitle className="text-3xl font-black tracking-tight">{user?.name || 'Client'}</CardTitle>
+                  <CardDescription>{user?.email}</CardDescription>
                 </div>
                 <Badge className="bg-zinc-900 px-3 py-1 text-xs uppercase tracking-wider text-white hover:bg-zinc-900">
                   Your Portal
@@ -160,64 +184,14 @@ export const ClientPortal: React.FC = () => {
 
             <CardContent>
               <div className="grid gap-4 text-sm text-zinc-600 md:grid-cols-2">
-                <div className="rounded-xl bg-zinc-100/70 p-4">
-                  <p className="mb-1 text-[11px] uppercase tracking-wider text-zinc-500">Company</p>
-                  <p className="font-semibold text-zinc-900">{clientData.company || 'N/A'}</p>
-                </div>
-                <div className="rounded-xl bg-zinc-100/70 p-4">
-                  <p className="mb-1 text-[11px] uppercase tracking-wider text-zinc-500">Website</p>
-                  <p className="font-semibold text-zinc-900">{clientData.website || 'N/A'}</p>
-                </div>
-                <div className="rounded-xl bg-zinc-100/70 p-4">
-                  <p className="mb-1 text-[11px] uppercase tracking-wider text-zinc-500">Phone</p>
-                  <p className="font-semibold text-zinc-900">{clientData.phone || 'N/A'}</p>
-                </div>
-                <div className="rounded-xl bg-zinc-100/70 p-4">
-                  <p className="mb-1 text-[11px] uppercase tracking-wider text-zinc-500">Status</p>
-                  <p className="font-semibold capitalize text-zinc-900">{clientData.status}</p>
-                </div>
+                <ProfileField label="Email" value={user?.email} />
+                <ProfileField label="Phone" value={user?.phone ?? user?.phoneNumber} />
+                <ProfileField label="Status" value={user?.isDisabled ? 'inactive' : 'active'} capitalize />
               </div>
             </CardContent>
           </Card>
 
-          {/* <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            <StatCard
-              title="Total Projects"
-              value={clientStats.totalProjects}
-              subtitle="All projects under your account"
-              icon={<Briefcase className="h-4 w-4" />}
-            />
-            <StatCard
-              title="Running Projects"
-              value={clientStats.runningProjects}
-              subtitle="Currently active projects"
-              icon={<PlayCircle className="h-4 w-4" />}
-            />
-            <StatCard
-              title="Team Members"
-              value={clientStats.totalEmployees}
-              subtitle="Assigned to your projects"
-              icon={<UserRound className="h-4 w-4" />}
-            />
-            <StatCard
-              title="Total Tasks"
-              value={clientStats.totalTasks}
-              subtitle="Tasks across all projects"
-              icon={<ListTodo className="h-4 w-4" />}
-            />
-            <StatCard
-              title="Active Tasks"
-              value={clientStats.runningTasks}
-              subtitle="Tasks in progress"
-              icon={<Loader2 className="h-4 w-4" />}
-            />
-            <StatCard
-              title="Completed Tasks"
-              value={clientStats.completedTasks}
-              subtitle="Delivered and completed"
-              icon={<CheckCircle2 className="h-4 w-4" />}
-            />
-          </div> */}
+          <StatsGrid stats={clientStats} loading={statsLoading} currency={invoices[0]?.currency as CurrencyCode | undefined} />
         </div>
       </div>
     );
@@ -244,19 +218,19 @@ export const ClientPortal: React.FC = () => {
           </CardHeader>
 
           <CardContent>
-            {loading ? (
+            {clientsQuery.isLoading ? (
               <div className="flex h-60 items-center justify-center text-zinc-500">
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading clients...
               </div>
-            ) : error ? (
-              <p className="text-sm text-red-500">{error}</p>
+            ) : clientsQuery.isError ? (
+              <p className="text-sm text-red-500">Failed to load clients. Please try again.</p>
             ) : filteredClients.length === 0 ? (
               <p className="text-sm text-zinc-500">No clients found.</p>
             ) : (
               <ScrollArea className="h-[62vh] pr-2">
                 <div className="space-y-2">
-                  {filteredClients.map((client) => {
-                    const isSelected = client.id === selectedClientId;
+                  {filteredClients.map((client: Client) => {
+                    const isSelected = client.id === (selectedClient?.id ?? '');
 
                     return (
                       <button
@@ -280,12 +254,7 @@ export const ClientPortal: React.FC = () => {
                           {client.email}
                         </p>
                         {client.company ? (
-                          <p
-                            className={cn(
-                              'mt-1 truncate text-[11px]',
-                              isSelected ? 'text-zinc-400' : 'text-zinc-400',
-                            )}
-                          >
+                          <p className="mt-1 truncate text-[11px] text-zinc-400">
                             {client.company}
                           </p>
                         ) : null}
@@ -313,93 +282,28 @@ export const ClientPortal: React.FC = () => {
                       <CardDescription>{selectedClient.email}</CardDescription>
                     </div>
                     <Badge className="bg-zinc-900 px-3 py-1 text-xs uppercase tracking-wider text-white hover:bg-zinc-900">
-                      Demo Portal
+                      Client Portal
                     </Badge>
                   </div>
                 </CardHeader>
 
                 <CardContent>
                   <div className="grid gap-4 text-sm text-zinc-600 md:grid-cols-2">
-                    <div className="rounded-xl bg-zinc-100/70 p-4">
-                      <p className="mb-1 text-[11px] uppercase tracking-wider text-zinc-500">Company</p>
-                      <p className="font-semibold text-zinc-900">{selectedClient.company || 'N/A'}</p>
-                    </div>
-                    <div className="rounded-xl bg-zinc-100/70 p-4">
-                      <p className="mb-1 text-[11px] uppercase tracking-wider text-zinc-500">Website</p>
-                      <p className="font-semibold text-zinc-900">{selectedClient.website || 'N/A'}</p>
-                    </div>
-                    <div className="rounded-xl bg-zinc-100/70 p-4">
-                      <p className="mb-1 text-[11px] uppercase tracking-wider text-zinc-500">Phone</p>
-                      <p className="font-semibold text-zinc-900">{selectedClient.phone || 'N/A'}</p>
-                    </div>
-                    <div className="rounded-xl bg-zinc-100/70 p-4">
-                      <p className="mb-1 text-[11px] uppercase tracking-wider text-zinc-500">Status</p>
-                      <p className="font-semibold capitalize text-zinc-900">{selectedClient.status || 'active'}</p>
-                    </div>
+                    <ProfileField label="Company" value={selectedClient.company} />
+                    <ProfileField label="Website" value={selectedClient.website} />
+                    <ProfileField label="Phone" value={selectedClient.phone} />
+                    <ProfileField label="Status" value={selectedClient.status || 'active'} capitalize />
                   </div>
                 </CardContent>
               </Card>
 
-              {stats && (
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                  <StatCard
-                    title="Total Projects"
-                    value={stats.totalProjects}
-                    subtitle="All projects under this client"
-                    icon={<Briefcase className="h-4 w-4" />}
-                  />
-                  <StatCard
-                    title="Running Projects"
-                    value={stats.runningProjects}
-                    subtitle="Currently active projects"
-                    icon={<PlayCircle className="h-4 w-4" />}
-                  />
-                  <StatCard
-                    title="Employees"
-                    value={stats.totalEmployees}
-                    subtitle="Assigned team members"
-                    icon={<UserRound className="h-4 w-4" />}
-                  />
-                  <StatCard
-                    title="Total Tasks"
-                    value={stats.totalTasks}
-                    subtitle="Tasks across all projects"
-                    icon={<ListTodo className="h-4 w-4" />}
-                  />
-                  <StatCard
-                    title="Running Tasks"
-                    value={stats.runningTasks}
-                    subtitle="Tasks in progress"
-                    icon={<Loader2 className="h-4 w-4" />}
-                  />
-                  <StatCard
-                    title="Completed Tasks"
-                    value={stats.completedTasks}
-                    subtitle="Delivered and done"
-                    icon={<CheckCircle2 className="h-4 w-4" />}
-                  />
-                </div>
+              {selectedClientStats && (
+                <StatsGrid
+                  stats={selectedClientStats}
+                  loading={statsLoading}
+                  currency={(selectedClient.currency as CurrencyCode | null) ?? undefined}
+                />
               )}
-
-              <Card className="rounded-3xl border-dashed border-zinc-300 bg-white/70">
-                <CardHeader>
-                  <CardTitle className="text-base">API Integration Next</CardTitle>
-                  <CardDescription>
-                    These metrics are demo values. Later you can replace them with real project/task/employee APIs for this selected client.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="flex flex-wrap gap-2">
-                  <Button variant="outline" className="rounded-xl border-zinc-300">
-                    <Building2 className="mr-2 h-4 w-4" /> Connect Projects API
-                  </Button>
-                  <Button variant="outline" className="rounded-xl border-zinc-300">
-                    <ListTodo className="mr-2 h-4 w-4" /> Connect Tasks API
-                  </Button>
-                  <Button variant="outline" className="rounded-xl border-zinc-300">
-                    <UserRound className="mr-2 h-4 w-4" /> Connect Employees API
-                  </Button>
-                </CardContent>
-              </Card>
             </>
           )}
         </div>

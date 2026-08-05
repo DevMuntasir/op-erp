@@ -1,4 +1,4 @@
-import { getApiData, postApiData } from '@/src/api/client';
+import { getApiData, postApiData, deleteApiData } from '@/src/api/client';
 import { User } from '@/src/shared/types/domain';
 
 export type InviteAdminPayload = {
@@ -15,4 +15,8 @@ export function listAdmins() {
 
 export function inviteAdmin(body: InviteAdminPayload) {
   return postApiData('/v1/admin/admins/invite', body);
+}
+
+export function deleteAdmin(uid: string) {
+  return deleteApiData<void>(`/v1/admin/admins/${uid}`);
 }

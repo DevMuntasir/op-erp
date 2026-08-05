@@ -17,6 +17,7 @@ import { BrandLogo } from '@/src/components/layout/BrandLogo';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
+import rehypeSanitize from 'rehype-sanitize';
 import { cn, formatCurrency } from '@/src/lib/utils';
 import { ProposalToolbar, ToolbarLeft, ToolbarRight, ToolbarDivider, ToolbarTitle } from '@/src/components/proposals/ProposalToolbar';
 
@@ -215,7 +216,7 @@ export const ProposalPreview = () => {
                     <div className="prose prose-base md:prose-lg max-w-4xl mx-auto markdown-content text-zinc-600 leading-relaxed space-y-5">
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
-                        rehypePlugins={[rehypeRaw]}
+                        rehypePlugins={[rehypeRaw, rehypeSanitize]}
                       >
                         {section.content}
                       </ReactMarkdown>
