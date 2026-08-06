@@ -10,7 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Search, Filter, Mail, Phone, Building, User as UserIcon, Edit2, Trash2, Users, Globe, Clock, ShieldCheck, Share2, Lock, Receipt } from 'lucide-react';
+import { Plus, Search, Filter, Mail, Phone, Building, User as UserIcon, Edit2, Trash2, Users, Globe, Clock, ShieldCheck, Share2, Lock, Receipt, Eye } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { ConfirmDialog } from '@/src/components/shared/dialogs/ConfirmDialog';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -232,6 +233,7 @@ const ClientManagementComponent = () => {
   const isSaving = createMutation.isPending || updateMutation.isPending;
   const loading = clientsQuery.isLoading;
   const loadingError = clientsQuery.error as Error | null;
+  const navigate = useNavigate();
 
   return (
     <div className="p-4 lg:p-8 bg-zinc-50/50 space-y-6">
@@ -476,6 +478,7 @@ const ClientManagementComponent = () => {
                 <TableHead className="text-[10px] font-black uppercase tracking-widest text-zinc-400 h-12">Status</TableHead>
                 <TableHead className="text-[10px] font-black uppercase tracking-widest text-zinc-400 h-12">Invoice & Date</TableHead>
                 <TableHead className="text-[10px] font-black uppercase tracking-widest text-zinc-400 h-12">Assigned Team</TableHead>
+              
                 {isSuperAdmin && <TableHead className="text-[10px] font-black uppercase tracking-widest text-zinc-400 h-12">Agency</TableHead>}
                 {isAdmin && <TableHead className="text-right h-12 px-6"></TableHead>}
               </TableRow>
@@ -624,6 +627,19 @@ const ClientManagementComponent = () => {
                           >
                             <ShieldCheck className="w-4 h-4" />
                           </Button> */}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 rounded-lg text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100"
+                            title="View Details"
+                            onClick={() => {
+                              const base = user?.role === 'super_admin' ? '/super-admin' : user?.role === 'employee' ? '/employee' : '/admin';
+                              navigate(`${base}/clients/${client.id}`);
+                            }}
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Button>
+
                           <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100" onClick={() => handleEdit(client)}>
                             <Edit2 className="w-4 h-4" />
                           </Button>

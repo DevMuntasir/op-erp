@@ -24,6 +24,7 @@ const TaskDetail = lazy(() => import('@/src/components/tasks/TaskDetail').then(m
 // Lazy load client components
 const ClientManagement = lazy(() => import('@/src/components/clients/ClientManagement').then(m => ({ default: m.ClientManagement })));
 const ClientPortal = lazy(() => import('@/src/components/clients/ClientPortal').then(m => ({ default: m.ClientPortal })));
+const ClientDetail = lazy(() => import('@/src/components/clients/ClientDetail').then(m => ({ default: m.default })));
 
 // Lazy load other components
 const SessionHistory = lazy(() => import('@/src/components/employees/SessionHistory').then(m => ({ default: m.SessionHistory })));
@@ -64,6 +65,7 @@ function AdminArea() {
           <Route path="tasks" element={<TaskManagement />} />
           <Route path="tasks/:taskId" element={<TaskDetail />} />
           <Route path="clients" element={<ClientManagement />} />
+          <Route path="clients/:clientId" element={<ClientDetail />} />
           <Route path="projects" element={<ProjectManagement />} />
           <Route path="history" element={<SessionHistory />} />
           <Route path="monitoring" element={<AdminScreenshots />} />
@@ -97,6 +99,7 @@ function EmployeeArea() {
           <Route path="tasks" element={<TaskManagement />} />
           <Route path="tasks/:taskId" element={<TaskDetail />} />
           <Route path="clients" element={<ClientManagement />} />
+          <Route path="clients/:clientId" element={<ClientDetail />} />
           <Route path="history" element={<SessionHistory />} />
           <Route path="leads" element={<LeadManagement />} />
           <Route path="finder" element={<LeadFinder />} />
@@ -146,6 +149,7 @@ function SuperAdminArea() {
           <Route path="tasks" element={<TaskManagement />} />
           <Route path="tasks/:taskId" element={<TaskDetail />} />
           <Route path="clients" element={<ClientManagement />} />
+          <Route path="clients/:clientId" element={<ClientDetail />} />
           <Route path="projects" element={<ProjectManagement />} />
           <Route path="history" element={<SessionHistory />} />
           <Route path="monitoring" element={<AdminScreenshots />} />

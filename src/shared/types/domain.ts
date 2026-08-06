@@ -79,6 +79,8 @@ export interface Project {
   createdAt?: Dateish;
   createdBy: string;
   name?: string;
+  isDeleted?: boolean;
+  tasks?: Task[];
 }
 
 export interface ProjectUpsertPayload {
@@ -124,6 +126,9 @@ export interface Client {
   invoiceValue?: number | string | null;
   currency?: CurrencyCode | string | null;
   notes?: string | null;
+  projects?: Project[];
+  reports?: Report[];
+  clientUid?: string;
   createdAt?: Dateish;
   updatedAt?: Dateish;
   createdBy?: string | null;
