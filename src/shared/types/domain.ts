@@ -20,6 +20,7 @@ export interface User {
   phone?: string | null;
   phoneNumber?: string | null;
   createdAt?: Dateish;
+  admins?: User[];
 }
 
 export interface TaskEditHistoryItem {

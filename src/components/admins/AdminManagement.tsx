@@ -19,7 +19,6 @@ export function AdminManagement() {
   const queryClient = useQueryClient();
   const [isAdding, setIsAdding] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [inviteType, setInviteType] = useState<'password' | 'invitation'>('invitation');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -34,14 +33,13 @@ export function AdminManagement() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.admins });
       setIsAdding(false);
-      setInviteType('invitation');
       setName('');
       setEmail('');
       setPassword('');
-      toast.success('Admin invitation sent');
+      toast.success('Admin created successfully');
     },
     onError: (error: Error) => {
-      toast.error('Failed to invite admin', { description: error.message });
+      toast.error('Failed to create admin', { description: error.message });
     },
   });
 
@@ -70,9 +68,9 @@ export function AdminManagement() {
     event.preventDefault();
     await inviteMutation.mutateAsync({
       email: email.toLowerCase().trim(),
-      type: inviteType,
+      type: 'password',
       role: 'admin',
-      password: inviteType === 'password' ? password : '',
+      password: password.trim(),
       name: name.trim(),
     });
   };
@@ -83,7 +81,7 @@ export function AdminManagement() {
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
           <div>
             <h2 className="text-2xl font-bold tracking-tight">Admin Management</h2>
-            <p className="text-zinc-500">Manage admin users and send new admin invitations.</p>
+            <p className="text-zinc-500">Manage admin users and create new admin accounts.</p>
           </div>
           <Dialog open={isAdding} onOpenChange={setIsAdding}>
             <DialogTrigger
@@ -97,32 +95,11 @@ export function AdminManagement() {
             <DialogContent className="overflow-hidden border-zinc-200 p-0 sm:max-w-md">
               <DialogHeader>
                 <div className="border-b border-zinc-200 bg-zinc-50 px-5 py-4">
-                  <DialogTitle className="text-base font-semibold">Invite Admin</DialogTitle>
-                  <p className="mt-1 text-xs text-zinc-500">Create admin access with invitation or password.</p>
+                  <DialogTitle className="text-base font-semibold">Create Admin</DialogTitle>
+                  <p className="mt-1 text-xs text-zinc-500">Create admin access with a password.</p>
                 </div>
               </DialogHeader>
               <form onSubmit={handleSubmit} className="space-y-4 px-5 py-5">
-                <div className="grid grid-cols-2 gap-2 rounded-lg bg-zinc-100 p-1">
-                  <button
-                    type="button"
-                    onClick={() => setInviteType('invitation')}
-                    className={`rounded-md px-3 py-2 text-sm font-medium transition ${
-                      inviteType === 'invitation' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-600 hover:text-zinc-900'
-                    }`}
-                  >
-                    Invitation
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setInviteType('password')}
-                    className={`rounded-md px-3 py-2 text-sm font-medium transition ${
-                      inviteType === 'password' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-600 hover:text-zinc-900'
-                    }`}
-                  >
-                    Password
-                  </button>
-                </div>
-
                 <div className="space-y-3 rounded-lg border border-zinc-200 p-3">
                   <div className="space-y-1.5">
                     <Label htmlFor="admin-email" className="text-xs uppercase tracking-wide text-zinc-500">
@@ -152,24 +129,22 @@ export function AdminManagement() {
                   </div>
                 </div>
 
-                {inviteType === 'password' && (
-                  <div className="space-y-1.5 rounded-lg border border-zinc-200 p-3">
-                    <Label htmlFor="admin-password" className="text-xs uppercase tracking-wide text-zinc-500">
-                      Password
-                    </Label>
-                    <Input
-                      id="admin-password"
-                      type="password"
-                      value={password}
-                      onChange={(event) => setPassword(event.target.value)}
-                      placeholder="Set temporary password"
-                      required={inviteType === 'password'}
-                    />
-                  </div>
-                )}
+                <div className="space-y-1.5 rounded-lg border border-zinc-200 p-3">
+                  <Label htmlFor="admin-password" className="text-xs uppercase tracking-wide text-zinc-500">
+                    Password
+                  </Label>
+                  <Input
+                    id="admin-password"
+                    type="password"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    placeholder="Set temporary password"
+                    required
+                  />
+                </div>
 
                 <Button type="submit" className="h-10 w-full" disabled={inviteMutation.isPending}>
-                  {inviteMutation.isPending ? 'Processing...' : inviteType === 'password' ? 'Create Admin' : 'Send Invitation'}
+                  {inviteMutation.isPending ? 'Processing...' : 'Create Admin'}
                 </Button>
               </form>
             </DialogContent>
@@ -191,7 +166,7 @@ export function AdminManagement() {
             <Table>
               <TableHeader>
                   <TableRow>
-                    <TableHead className="min-w-[260px]">Admin</TableHead>
+                    <TableHead className="min-w-[16rem]">Admin</TableHead>
                     <TableHead>Role</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Created At</TableHead>
@@ -236,7 +211,7 @@ export function AdminManagement() {
                             if (!ok) return;
                             await deleteMutation.mutateAsync(admin.uid);
                           }}
-                          disabled={deleteMutation.isLoading}
+                          disabled={deleteMutation.isPending}
                         >
                           <Trash className="h-4 w-4" />
                         </Button>

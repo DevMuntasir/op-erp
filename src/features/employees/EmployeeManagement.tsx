@@ -195,6 +195,7 @@ export function EmployeeManagement() {
                   <TableHead className="min-w-[200px]">Employee</TableHead>
                   <TableHead>Role</TableHead>
                   <TableHead>Status</TableHead>
+                  {user?.role === 'super_admin' && <TableHead>Under Admins</TableHead>}
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -223,6 +224,30 @@ export function EmployeeManagement() {
                       </div>
                     </TableCell>
 
+                    {user?.role === 'super_admin' && (
+                      <TableCell>
+                        {employee.admins && employee.admins.length > 0 ? (
+                          <div className="flex flex-wrap gap-1.5">
+                            {employee.admins.map((admin) => (
+                              <div
+                                key={admin.uid}
+                                className="flex items-center gap-1.5 rounded-full border border-zinc-200 bg-zinc-50 py-0.5 pl-0.5 pr-2"
+                                title={admin.email ?? admin.name}
+                              >
+                                <Avatar className="h-5 w-5">
+                                  <AvatarImage src={admin.photoURL ?? undefined} />
+                                  <AvatarFallback className="text-[10px]">{admin.name?.[0] || 'A'}</AvatarFallback>
+                                </Avatar>
+                                <span className="max-w-[120px] truncate text-xs font-medium text-zinc-700">{admin.name}</span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-zinc-400">—</span>
+                        )}
+                      </TableCell>
+                    )}
+
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2 items-center">
                         <Button size="icon" variant="ghost" onClick={() => navigate(employee.uid)}>
@@ -237,7 +262,7 @@ export function EmployeeManagement() {
                 ))}
                 {!rows.length && (
                   <TableRow>
-                    <TableCell colSpan={4} className="py-12 text-center text-zinc-400">
+                    <TableCell colSpan={user?.role === 'super_admin' ? 5 : 4} className="py-12 text-center text-zinc-400">
                       <Users className="mx-auto mb-3 h-8 w-8 opacity-20" />
                       <p className="text-sm font-medium">No employees found.</p>
                     </TableCell>
