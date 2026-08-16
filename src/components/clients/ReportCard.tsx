@@ -201,32 +201,36 @@ export default function ReportCard({
 
             <div className="flex flex-wrap gap-4 p-6">
 
-                <Button asChild>
+                <Button
+                    render={
+                        <a
+                            href={report.pdfUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                        >
+                            <ExternalLink className="mr-2 h-4 w-4" />
 
-                    <a
-                        href={report.pdfUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                    >
-                        <ExternalLink className="mr-2 h-4 w-4" />
+                            Open PDF
 
-                        Open PDF
-
-                    </a>
-
-                </Button>
+                        </a>
+                    }
+                />
 
                 <Button
                     variant="outline"
-                    asChild
-                >
+                    render={
+                        <a
+                            href={report.pdfUrl}
+                            download
+                        >
 
-                    <a
-                        href={report.pdfUrl}
-                        download
-                    >
+                            <Download className="mr-2 h-4 w-4" />
 
-                        <Download className="mr-2 h-4 w-4" />
+                            Download PDF
+
+                        </a>
+                    }
+                />
 
                         Download
 

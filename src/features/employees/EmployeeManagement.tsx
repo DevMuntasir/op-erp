@@ -25,6 +25,7 @@ export function EmployeeManagement() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [isAdding, setIsAdding] = useState(false);
+  const [inviteType, setInviteType] = useState<'invitation' | 'password'>('invitation');
   const [searchTerm, setSearchTerm] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -44,12 +45,27 @@ export function EmployeeManagement() {
       setNewEmail('');
       setNewPassword('');
       setNewName('');
-      toast.success('Employee created successfully');
+      setInviteType('invitation');
+      toast.success(inviteType === 'password' ? 'Employee created successfully' : 'Invitation sent successfully');
     },
     onError: (error: Error) => {
       toast.error('Failed to create employee', { description: error.message });
     },
   });
+
+  const copyInviteLink = (email: string) => {
+    const link = `${window.location.origin}/login?invite=${encodeURIComponent(email)}`;
+    navigator.clipboard.writeText(link);
+    toast.success('Invite link copied');
+  };
+
+  const sendInviteEmail = (email: string) => {
+    const subject = encodeURIComponent('Invitation to join OP Media CRM');
+    const body = encodeURIComponent(
+      `Hello,\n\nYou have been invited to join the OP Media CRM.\n\nPlease continue with your account here: ${window.location.origin}/login\n`,
+    );
+    window.location.href = `mailto:${email}?subject=${subject}&body=${body}`;
+  };
 
   const deleteMutation = useMutation({
     mutationFn: deleteEmployee,
@@ -92,8 +108,8 @@ export function EmployeeManagement() {
     await inviteMutation.mutateAsync({
       email: newEmail.toLowerCase().trim(),
       role: 'employee',
-      type: 'password',
-      password: newPassword,
+      type: inviteType,
+      password: inviteType === 'password' ? newPassword : undefined,
       name: newName.trim(),
     });
   };
@@ -118,11 +134,32 @@ export function EmployeeManagement() {
             <DialogContent className="overflow-hidden border-zinc-200 p-0 sm:max-w-md">
               <DialogHeader>
                 <div className="border-b border-zinc-200 bg-zinc-50 px-5 py-4">
-                  <DialogTitle className="text-base font-semibold">Create Employee</DialogTitle>
-                  <p className="mt-1 text-xs text-zinc-500">Create a password-based employee account.</p>
+                  <DialogTitle className="text-base font-semibold">Invite Employee</DialogTitle>
+                  <p className="mt-1 text-xs text-zinc-500">Create access for your team member.</p>
                 </div>
               </DialogHeader>
               <form onSubmit={handleSendInvite} className="space-y-4 px-5 py-5">
+                <div className="grid grid-cols-2 gap-2 rounded-lg bg-zinc-100 p-1">
+                  <button
+                    type="button"
+                    onClick={() => setInviteType('invitation')}
+                    className={`rounded-md px-3 py-2 text-sm font-medium transition ${
+                      inviteType === 'invitation' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-600 hover:text-zinc-900'
+                    }`}
+                  >
+                    Invitation
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setInviteType('password')}
+                    className={`rounded-md px-3 py-2 text-sm font-medium transition ${
+                      inviteType === 'password' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-600 hover:text-zinc-900'
+                    }`}
+                  >
+                    Password
+                  </button>
+                </div>
+
                 <div className="space-y-3 rounded-lg border border-zinc-200 p-3">
                   <div className="space-y-1.5">
                     <Label htmlFor="email" className="text-xs uppercase tracking-wide text-zinc-500">
@@ -136,26 +173,28 @@ export function EmployeeManagement() {
                     </Label>
                     <Input id="name" type="text" value={newName} onChange={(e) => setNewName(e.target.value)} required />
                   </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="password" className="text-xs uppercase tracking-wide text-zinc-500">
-                      Password
-                    </Label>
-                    <Input
-                      id="password"
-                      type="password"
-                      value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                      required
-                    />
-                  </div>
+                  {inviteType === 'password' && (
+                    <div className="space-y-1.5">
+                      <Label htmlFor="password" className="text-xs uppercase tracking-wide text-zinc-500">
+                        Password
+                      </Label>
+                      <Input
+                        id="password"
+                        type="password"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        required={inviteType === 'password'}
+                      />
+                    </div>
+                  )}
                 </div>
 
                 <div className="border-t border-zinc-200 pt-1">
                   <Button type="submit" className="h-10 w-full" disabled={inviteMutation.isPending}>
-                    {inviteMutation.isPending ? 'Processing...' : 'Create Account'}
+                    {inviteMutation.isPending ? 'Processing...' : inviteType === 'password' ? 'Create Account' : 'Send Invitation'}
                   </Button>
                 </div>
-                <input type="hidden" name="type" value="password" />
+                <input type="hidden" name="type" value={inviteType} />
                 <input type="hidden" name="role" value="employee" />
                 <input type="hidden" name="name" value={newName} />
                 <input type="hidden" name="email" value={newEmail} />
@@ -168,6 +207,7 @@ export function EmployeeManagement() {
                     setNewEmail('');
                     setNewName('');
                     setNewPassword('');
+                    setInviteType('invitation');
                   }}
                 >
                   Reset form

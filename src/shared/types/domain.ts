@@ -138,6 +138,7 @@ export interface Client {
 export interface ClientUpsertPayload {
   name?: string;
   email?: string;
+  type?: 'invitation' | 'password';
   password?: string;
   phone?: string;
   company?: string;

@@ -18,6 +18,7 @@ import { toast } from 'sonner';
 export function AdminManagement() {
   const queryClient = useQueryClient();
   const [isAdding, setIsAdding] = useState(false);
+  const [inviteType, setInviteType] = useState<'invitation' | 'password'>('invitation');
   const [searchTerm, setSearchTerm] = useState('');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -36,7 +37,8 @@ export function AdminManagement() {
       setName('');
       setEmail('');
       setPassword('');
-      toast.success('Admin created successfully');
+      setInviteType('invitation');
+      toast.success(inviteType === 'password' ? 'Admin created successfully' : 'Invitation sent successfully');
     },
     onError: (error: Error) => {
       toast.error('Failed to create admin', { description: error.message });
@@ -68,9 +70,9 @@ export function AdminManagement() {
     event.preventDefault();
     await inviteMutation.mutateAsync({
       email: email.toLowerCase().trim(),
-      type: 'password',
+      type: inviteType,
       role: 'admin',
-      password: password.trim(),
+      password: inviteType === 'password' ? password.trim() : undefined,
       name: name.trim(),
     });
   };
@@ -95,11 +97,32 @@ export function AdminManagement() {
             <DialogContent className="overflow-hidden border-zinc-200 p-0 sm:max-w-md">
               <DialogHeader>
                 <div className="border-b border-zinc-200 bg-zinc-50 px-5 py-4">
-                  <DialogTitle className="text-base font-semibold">Create Admin</DialogTitle>
-                  <p className="mt-1 text-xs text-zinc-500">Create admin access with a password.</p>
+                  <DialogTitle className="text-base font-semibold">Invite Admin</DialogTitle>
+                  <p className="mt-1 text-xs text-zinc-500">Create admin access with invitation or password.</p>
                 </div>
               </DialogHeader>
               <form onSubmit={handleSubmit} className="space-y-4 px-5 py-5">
+                <div className="grid grid-cols-2 gap-2 rounded-lg bg-zinc-100 p-1">
+                  <button
+                    type="button"
+                    onClick={() => setInviteType('invitation')}
+                    className={`rounded-md px-3 py-2 text-sm font-medium transition ${
+                      inviteType === 'invitation' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-600 hover:text-zinc-900'
+                    }`}
+                  >
+                    Invitation
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setInviteType('password')}
+                    className={`rounded-md px-3 py-2 text-sm font-medium transition ${
+                      inviteType === 'password' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-600 hover:text-zinc-900'
+                    }`}
+                  >
+                    Password
+                  </button>
+                </div>
+
                 <div className="space-y-3 rounded-lg border border-zinc-200 p-3">
                   <div className="space-y-1.5">
                     <Label htmlFor="admin-email" className="text-xs uppercase tracking-wide text-zinc-500">
@@ -129,22 +152,24 @@ export function AdminManagement() {
                   </div>
                 </div>
 
-                <div className="space-y-1.5 rounded-lg border border-zinc-200 p-3">
-                  <Label htmlFor="admin-password" className="text-xs uppercase tracking-wide text-zinc-500">
-                    Password
-                  </Label>
-                  <Input
-                    id="admin-password"
-                    type="password"
-                    value={password}
-                    onChange={(event) => setPassword(event.target.value)}
-                    placeholder="Set temporary password"
-                    required
-                  />
-                </div>
+                {inviteType === 'password' && (
+                  <div className="space-y-1.5 rounded-lg border border-zinc-200 p-3">
+                    <Label htmlFor="admin-password" className="text-xs uppercase tracking-wide text-zinc-500">
+                      Password
+                    </Label>
+                    <Input
+                      id="admin-password"
+                      type="password"
+                      value={password}
+                      onChange={(event) => setPassword(event.target.value)}
+                      placeholder="Set temporary password"
+                      required={inviteType === 'password'}
+                    />
+                  </div>
+                )}
 
                 <Button type="submit" className="h-10 w-full" disabled={inviteMutation.isPending}>
-                  {inviteMutation.isPending ? 'Processing...' : 'Create Admin'}
+                  {inviteMutation.isPending ? 'Processing...' : inviteType === 'password' ? 'Create Admin' : 'Send Invitation'}
                 </Button>
               </form>
             </DialogContent>

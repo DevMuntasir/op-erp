@@ -3,9 +3,9 @@ import { User } from '@/src/shared/types/domain';
 
 export type InviteAdminPayload = {
   email: string;
-  type: 'password';
+  type: 'invitation' | 'password';
   role: 'admin';
-  password: string;
+  password?: string;
   name: string;
 };
 
