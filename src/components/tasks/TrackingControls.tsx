@@ -129,10 +129,13 @@ export const TrackingControls = () => {
   const [selectedTaskId, setSelectedTaskId] = useState<string>('');
   const [elapsedTime, setElapsedTime] = useState(0);
   const [isCapturing, setIsCapturing] = useState(false);
+  const [isTabActive, setIsTabActive] = useState(true);
   const timerRef = useRef<number | null>(null);
   const screenshotTimeoutRef = useRef<number | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
   const screenVideoRef = useRef<HTMLVideoElement | null>(null);
+  const workerRef = useRef<Worker | null>(null);
+  const activeSessionIdRef = useRef<string | null>(null);
 
   const tasksQuery = useTasks();
   const sessionsQuery = useUserSessions();
@@ -143,6 +146,9 @@ export const TrackingControls = () => {
       sessionsQuery.data?.find((session) => session.userId === user.uid && session.status === 'active') ?? null
     );
   }, [sessionsQuery.data, user]);
+
+  // Keep the ref in sync so async callbacks always have the current session id
+  activeSessionIdRef.current = activeSession?.id ?? null;
 
   const tasks = useMemo<Task[]>(() => {
     if (!user) return [];
@@ -161,6 +167,17 @@ export const TrackingControls = () => {
       setSelectedTaskId(activeSession.taskId);
     }
   }, [activeSession?.taskId]);
+
+  // Tab visibility listener
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      setIsTabActive(!document.hidden);
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
 
   useEffect(() => {
     if (!activeSession?.startTime) {
@@ -196,13 +213,41 @@ export const TrackingControls = () => {
   };
 
   useEffect(() => {
-    if (activeSession?.id) {
+    if (!activeSession?.id) {
+      if (workerRef.current) {
+        workerRef.current.postMessage({ command: 'stop' });
+        workerRef.current.terminate();
+        workerRef.current = null;
+      }
+      if (screenshotTimeoutRef.current) {
+        window.clearTimeout(screenshotTimeoutRef.current);
+      }
+      return;
+    }
+
+    // Try starting Web Worker for uninterrupted background interval captures
+    try {
+      if (!workerRef.current) {
+        const worker = new Worker(new URL('../../workers/timerWorker.ts', import.meta.url), { type: 'module' });
+        worker.onmessage = async (e) => {
+          if (e.data?.type === 'tick' && activeSessionIdRef.current) {
+            await captureScreenshot(activeSessionIdRef.current);
+          }
+        };
+        worker.postMessage({ command: 'start', delay: AUTO_SCREENSHOT_DELAY_MS });
+        workerRef.current = worker;
+      }
+    } catch (err) {
+      console.warn('Web Worker background timer fallback to setTimeout', err);
       scheduleScreenshot(activeSession.id);
-    } else if (screenshotTimeoutRef.current) {
-      window.clearTimeout(screenshotTimeoutRef.current);
     }
 
     return () => {
+      if (workerRef.current) {
+        workerRef.current.postMessage({ command: 'stop' });
+        workerRef.current.terminate();
+        workerRef.current = null;
+      }
       if (screenshotTimeoutRef.current) {
         window.clearTimeout(screenshotTimeoutRef.current);
       }
@@ -241,12 +286,24 @@ export const TrackingControls = () => {
       return startTaskWork(selectedTask, { activeSession });
     },
     onSuccess: async (result) => {
-      await initializeScreenCapture(result.session.id);
+      const captureSuccess = await initializeScreenCapture(result.session.id);
+      if (!captureSuccess) {
+        // Stop session if entire screen capture validation failed or was cancelled
+        try {
+          await stopSession({
+            sessionId: result.session.id,
+            activeTimeSec: 0,
+          });
+        } catch (e) {
+          console.error('Failed to cancel session after screen capture failure:', e);
+        }
+        return;
+      }
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.tasks() }),
         queryClient.invalidateQueries({ queryKey: queryKeys.sessions({ scope: 'me' }) }),
       ]);
-      toast.success(result.sessionStarted ? 'Task started and tracking enabled' : 'Tracking is already active for this task');
+      toast.success(result.sessionStarted ? 'Task started and screen tracking enabled' : 'Tracking is already active for this task');
     },
     onError: (error: Error) => {
       toast.error('Failed to start task', { description: error.message });
@@ -277,9 +334,26 @@ export const TrackingControls = () => {
       if (screenStreamRef.current) return true;
 
       const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: { cursor: 'always' } as any,
+        video: {
+          cursor: 'always',
+          displaySurface: 'monitor', // Prefer entire screen capture
+        } as any,
         audio: false,
       });
+
+      const videoTrack = stream.getVideoTracks()[0];
+      const settings = (videoTrack.getSettings ? videoTrack.getSettings() : {}) as any;
+
+      // ENFORCE ENTIRE SCREEN SELECTION
+      // Modern Chromium values: 'monitor' (Entire Screen), 'window', or 'browser' (Single Tab)
+      if (settings.displaySurface && settings.displaySurface !== 'monitor') {
+        videoTrack.stop();
+        toast.error('Entire Screen Capture Required!', {
+          description: 'You selected a single tab/window. Please select "Entire Screen" or "Entire Display" so active tab switching can be tracked.',
+          duration: 8000,
+        });
+        return false;
+      }
 
       screenStreamRef.current = stream;
 
@@ -288,7 +362,7 @@ export const TrackingControls = () => {
       video.play();
       screenVideoRef.current = video;
 
-      stream.getVideoTracks()[0].onended = async () => {
+      videoTrack.onended = async () => {
         toast.info('Screen capture ended');
         stopScreenCapture();
         try {
@@ -310,6 +384,9 @@ export const TrackingControls = () => {
       if (error.name !== 'NotAllowedError') {
         console.error('Desktop screenshot init error:', error);
       }
+      toast.error('Screen capture permission required', {
+        description: 'You must grant screen capture permission to track tasks.',
+      });
       return false;
     }
   };

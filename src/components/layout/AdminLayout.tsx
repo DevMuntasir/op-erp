@@ -9,6 +9,7 @@ import { listNotifications, markNotificationRead } from '@/src/api/endpoints/not
 import { useAuth } from '@/src/App';
 import { BrandLogo } from '@/src/components/layout/BrandLogo';
 import { TrackingControls } from '@/src/components/tasks/TrackingControls';
+import { PwaInstallPrompt } from '@/src/components/common/PwaInstallPrompt';
 import { queryKeys } from '@/src/shared/constants/query-keys';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -349,6 +350,7 @@ export const AppLayout: React.FC<{ children: React.ReactNode, role: 'admin' | 's
           </div>
 
           <div className="flex items-center gap-1.5 sm:gap-3 ml-auto">
+            <PwaInstallPrompt />
             <div className="flex items-center tracking-controls-container">
               <TrackingControls />
             </div>
