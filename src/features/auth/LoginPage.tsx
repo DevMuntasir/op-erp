@@ -175,9 +175,8 @@ export function LoginPage() {
                 setAuthMode('login');
                 setErrorMessage(null);
               }}
-              className={`rounded-full py-2 text.xs text-sm font-semibold transition ${
-                authMode === 'login' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-900'
-              }`}
+              className={`rounded-full py-2 text.xs text-sm font-semibold transition ${authMode === 'login' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-900'
+                }`}
             >
               Log In
             </button>
@@ -187,9 +186,8 @@ export function LoginPage() {
                 setAuthMode('invite');
                 setErrorMessage(null);
               }}
-              className={`rounded-full py-2 text-xs text-sm font-semibold transition ${
-                authMode === 'invite' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-900'
-              }`}
+              className={`rounded-full py-2 text-xs text-sm font-semibold transition ${authMode === 'invite' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-900'
+                }`}
             >
               Invite Code
             </button>
@@ -197,7 +195,7 @@ export function LoginPage() {
 
           {authMode === 'login' && (
             <>
-              <button
+              {/* <button
                 type="button"
                 onClick={handleGoogleLogin}
                 disabled={loading || googleSubmitting || submitting}
@@ -205,7 +203,7 @@ export function LoginPage() {
               >
                 {googleSubmitting ? <Loader2 className="h-5 w-5 animate-spin" /> : <GoogleIcon />}
                 Continue with Google
-              </button>
+              </button> */}
 
               <div className="flex items-center gap-4 text-xs font-semibold uppercase tracking-[0.28em] text-zinc-400">
                 <div className="h-px flex-1 bg-zinc-200" />
