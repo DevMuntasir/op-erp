@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { GoogleAuthProvider, User as FirebaseUser, onAuthStateChanged, signInWithEmailAndPassword, signOut, signInWithPopup } from 'firebase/auth';
 import { collection, doc, getDoc, getDocs, limit, query, where } from 'firebase/firestore';
-import { acceptInvite, getCurrentUser } from '@/src/api/endpoints/auth.api';
+import { acceptInvite, getCurrentUser, AcceptInvitePayload } from '@/src/api/endpoints/auth.api';
 import { auth, db } from '@/src/lib/firebase';
 import { User } from '@/src/shared/types/domain';
 import { toast } from 'sonner';
@@ -12,7 +12,7 @@ interface AuthContextValue {
   loading: boolean;
   login: () => Promise<void>;
   loginWithPassword: (email: string, password: string) => Promise<void>;
-  acceptInvitation: (code: string) => Promise<void>;
+  acceptInvitation: (payload: AcceptInvitePayload) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
@@ -166,8 +166,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await signInWithEmailAndPassword(auth, email.trim(), password);
   };
 
-  const acceptInvitation = async (code: string) => {
-    await acceptInvite(code.trim());
+  const acceptInvitation = async (payload: AcceptInvitePayload) => {
+    await acceptInvite(payload);
   };
 
   const value = useMemo<AuthContextValue>(

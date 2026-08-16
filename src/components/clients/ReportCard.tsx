@@ -223,20 +223,12 @@ export default function ReportCard({
                             href={report.pdfUrl}
                             download
                         >
-
                             <Download className="mr-2 h-4 w-4" />
 
                             Download PDF
-
                         </a>
                     }
                 />
-
-                        Download
-
-                    </a>
-
-                </Button>
 
             </div>
 

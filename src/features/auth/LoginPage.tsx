@@ -2,11 +2,13 @@ import { BrandLogo } from '@/src/components/layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/src/features/auth/AuthProvider';
-import { Loader2, LockKeyhole, Mail } from 'lucide-react';
+import { KeyRound, Loader2, LockKeyhole, Mail, User } from 'lucide-react';
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { StatefulButton } from '@/components/ui/stateful-button';
 import { ApiClientError } from '@/src/shared/types/api';
+import { acceptInvite } from '@/src/api/endpoints/auth.api';
+import { toast } from 'sonner';
 
 function GoogleIcon() {
   return (
@@ -34,12 +36,28 @@ function GoogleIcon() {
 export function LoginPage() {
   const { login, loginWithPassword, user, loading } = useAuth();
   const navigate = useNavigate();
+  const [authMode, setAuthMode] = useState<'login' | 'invite'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [code, setCode] = useState('');
+  const [name, setName] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [googleSubmitting, setGoogleSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const passwordInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    const paramCode = searchParams.get('code') || searchParams.get('invite');
+    const paramEmail = searchParams.get('email');
+    if (paramCode) {
+      setCode(paramCode);
+      setAuthMode('invite');
+    }
+    if (paramEmail) {
+      setEmail(paramEmail);
+    }
+  }, []);
 
   const showPassword = email.trim().length > 0;
 
@@ -76,23 +94,50 @@ export function LoginPage() {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!showPassword) return;
-
     setErrorMessage(null);
-    setSubmitting(true);
 
-    try {
-      await loginWithPassword(email, password);
-    } catch (error) {
-      if (error instanceof ApiClientError) {
-        setErrorMessage(error.message);
-      } else if (error instanceof Error) {
-        setErrorMessage(error.message);
-      } else {
-        setErrorMessage('Unable to continue. Please try again.');
+    if (authMode === 'login') {
+      if (!showPassword) return;
+      setSubmitting(true);
+      try {
+        await loginWithPassword(email, password);
+      } catch (error) {
+        if (error instanceof ApiClientError) {
+          setErrorMessage(error.message);
+        } else if (error instanceof Error) {
+          setErrorMessage(error.message);
+        } else {
+          setErrorMessage('Unable to continue. Please try again.');
+        }
+      } finally {
+        setSubmitting(false);
       }
-    } finally {
-      setSubmitting(false);
+    } else {
+      if (!email.trim() || !code.trim() || !name.trim() || !password.trim()) {
+        setErrorMessage('All fields are required.');
+        return;
+      }
+      setSubmitting(true);
+      try {
+        const res = await acceptInvite({
+          email: email.trim().toLowerCase(),
+          password: password.trim(),
+          code: code.trim(),
+          name: name.trim(),
+        });
+        toast.success(res.message || 'Invitation accepted successfully!');
+        await loginWithPassword(email.trim().toLowerCase(), password.trim());
+      } catch (error) {
+        if (error instanceof ApiClientError) {
+          setErrorMessage(error.message);
+        } else if (error instanceof Error) {
+          setErrorMessage(error.message);
+        } else {
+          setErrorMessage('Failed to accept invitation. Please verify your code and try again.');
+        }
+      } finally {
+        setSubmitting(false);
+      }
     }
   };
 
@@ -111,28 +156,64 @@ export function LoginPage() {
         <CardHeader className="space-y-6 px-8 pt-10 text-center">
           <BrandLogo className="mx-auto w-32 md:w-40" />
           <div className="space-y-3">
-            <CardTitle className="text-4xl font-semibold tracking-tight text-zinc-950">Log in or sign up</CardTitle>
+            <CardTitle className="text-4xl font-semibold tracking-tight text-zinc-950">
+              {authMode === 'login' ? 'Log in or sign up' : 'Accept Invitation'}
+            </CardTitle>
             <CardDescription className="mx-auto max-w-sm text-base leading-7 text-zinc-600">
-              You&apos;ll get smarter responses and can manage your CRM workspace from one place.
+              {authMode === 'login'
+                ? "You'll get smarter responses and can manage your CRM workspace from one place."
+                : 'Enter your email, invitation code, name, and set a password to join.'}
             </CardDescription>
           </div>
         </CardHeader>
-        <CardContent className="space-y-6 px-8 pb-8">
-          <button
-            type="button"
-            onClick={handleGoogleLogin}
-            disabled={loading || googleSubmitting || submitting}
-            className="inline-flex h-14 w-full items-center justify-center gap-3 rounded-full border border-zinc-300 bg-white px-6 text-base font-semibold text-zinc-900 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {googleSubmitting ? <Loader2 className="h-5 w-5 animate-spin" /> : <GoogleIcon />}
-            Continue with Google
-          </button>
 
-          <div className="flex items-center gap-4 text-xs font-semibold uppercase tracking-[0.28em] text-zinc-400">
-            <div className="h-px flex-1 bg-zinc-200" />
-            <span className="tracking-[0.22em]">Or</span>
-            <div className="h-px flex-1 bg-zinc-200" />
+        <CardContent className="space-y-6 px-8 pb-8">
+          <div className="grid grid-cols-2 gap-2 rounded-full bg-zinc-100 p-1">
+            <button
+              type="button"
+              onClick={() => {
+                setAuthMode('login');
+                setErrorMessage(null);
+              }}
+              className={`rounded-full py-2 text.xs text-sm font-semibold transition ${
+                authMode === 'login' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-900'
+              }`}
+            >
+              Log In
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAuthMode('invite');
+                setErrorMessage(null);
+              }}
+              className={`rounded-full py-2 text-xs text-sm font-semibold transition ${
+                authMode === 'invite' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-900'
+              }`}
+            >
+              Invite Code
+            </button>
           </div>
+
+          {authMode === 'login' && (
+            <>
+              <button
+                type="button"
+                onClick={handleGoogleLogin}
+                disabled={loading || googleSubmitting || submitting}
+                className="inline-flex h-14 w-full items-center justify-center gap-3 rounded-full border border-zinc-300 bg-white px-6 text-base font-semibold text-zinc-900 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {googleSubmitting ? <Loader2 className="h-5 w-5 animate-spin" /> : <GoogleIcon />}
+                Continue with Google
+              </button>
+
+              <div className="flex items-center gap-4 text-xs font-semibold uppercase tracking-[0.28em] text-zinc-400">
+                <div className="h-px flex-1 bg-zinc-200" />
+                <span className="tracking-[0.22em]">Or</span>
+                <div className="h-px flex-1 bg-zinc-200" />
+              </div>
+            </>
+          )}
 
           <form className="space-y-4" onSubmit={handleSubmit}>
             <div className="space-y-3">
@@ -154,7 +235,59 @@ export function LoginPage() {
                 />
               </div>
 
-              {showPassword ? (
+              {authMode === 'invite' && (
+                <>
+                  <div className="relative">
+                    <KeyRound className="pointer-events-none absolute left-5 top-1/2 h-5 w-5 -translate-y-1/2 text-zinc-400" />
+                    <Input
+                      id="code"
+                      type="text"
+                      value={code}
+                      onChange={(event) => {
+                        setCode(event.target.value);
+                        setErrorMessage(null);
+                      }}
+                      placeholder="Invitation Code"
+                      className="h-14 rounded-full border-zinc-300 bg-white pl-14 pr-5 text-base"
+                      required
+                    />
+                  </div>
+
+                  <div className="relative">
+                    <User className="pointer-events-none absolute left-5 top-1/2 h-5 w-5 -translate-y-1/2 text-zinc-400" />
+                    <Input
+                      id="name"
+                      type="text"
+                      value={name}
+                      onChange={(event) => {
+                        setName(event.target.value);
+                        setErrorMessage(null);
+                      }}
+                      placeholder="Your Full Name"
+                      className="h-14 rounded-full border-zinc-300 bg-white pl-14 pr-5 text-base"
+                      required
+                    />
+                  </div>
+
+                  <div className="relative">
+                    <LockKeyhole className="pointer-events-none absolute left-5 top-1/2 h-5 w-5 -translate-y-1/2 text-zinc-400" />
+                    <Input
+                      id="invite-password"
+                      type="password"
+                      value={password}
+                      onChange={(event) => {
+                        setPassword(event.target.value);
+                        setErrorMessage(null);
+                      }}
+                      placeholder="Set New Password"
+                      className="h-14 rounded-full border-zinc-300 bg-white pl-14 pr-5 text-base"
+                      required
+                    />
+                  </div>
+                </>
+              )}
+
+              {authMode === 'login' && showPassword && (
                 <div className="relative">
                   <LockKeyhole className="pointer-events-none absolute left-5 top-1/2 h-5 w-5 -translate-y-1/2 text-zinc-400" />
                   <Input
@@ -172,7 +305,7 @@ export function LoginPage() {
                     required
                   />
                 </div>
-              ) : null}
+              )}
             </div>
 
             {errorMessage ? <p className="text-sm font-medium text-red-600">{errorMessage}</p> : null}
@@ -181,9 +314,9 @@ export function LoginPage() {
               type="submit"
               className="h-14 w-full rounded-full bg-zinc-950 text-base font-semibold text-white hover:bg-zinc-800"
               state={submitting ? 'loading' : 'idle'}
-              idleText="Log in"
-              loadingText="Logging in..."
-              disabled={loading || submitting || googleSubmitting || !showPassword}
+              idleText={authMode === 'login' ? 'Log in' : 'Accept Invitation & Join'}
+              loadingText={authMode === 'login' ? 'Logging in...' : 'Submitting invitation...'}
+              disabled={loading || submitting || googleSubmitting || (authMode === 'login' && !showPassword)}
             />
           </form>
         </CardContent>
