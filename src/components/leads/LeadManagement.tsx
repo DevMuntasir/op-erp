@@ -274,30 +274,28 @@ export const LeadManagement = () => {
             <h2 className="text-3xl font-bold tracking-tight text-zinc-900">Lead Management</h2>
             <p className="text-zinc-500">Track and manage your agency's potential clients.</p>
           </div>
-          {user?.role !== 'employee' && (
-            <Dialog
-              open={isAdding}
-              onOpenChange={(open) => {
-                setIsAdding(open);
-                if (!open) resetForm();
-              }}
-            >
-              <DialogTrigger
-                render={
-                  <Button className="bg-zinc-900 hover:bg-zinc-800 text-white gap-2">
-                    <Plus className="w-4 h-4" />
-                    Add New Lead
-                  </Button>
-                }
-              />
-              <DialogContent className="sm:max-w-[500px] max-h-[90vh] min-h-0 overflow-hidden flex flex-col p-0">
-                <DialogHeader className="p-6 pb-2">
-                  <DialogTitle>Add New Lead</DialogTitle>
-                </DialogHeader>
-                <div className="flex-1 overflow-y-auto p-6 pt-0">{renderLeadForm(handleAddLead, 'Create Lead', createMutation.isPending)}</div>
-              </DialogContent>
-            </Dialog>
-          )}
+          <Dialog
+            open={isAdding}
+            onOpenChange={(open) => {
+              setIsAdding(open);
+              if (!open) resetForm();
+            }}
+          >
+            <DialogTrigger
+              render={
+                <Button className="bg-zinc-900 hover:bg-zinc-800 text-white gap-2">
+                  <Plus className="w-4 h-4" />
+                  Add New Lead
+                </Button>
+              }
+            />
+            <DialogContent className="sm:max-w-[500px] max-h-[90vh] min-h-0 overflow-hidden flex flex-col p-0">
+              <DialogHeader className="p-6 pb-2">
+                <DialogTitle>Add New Lead</DialogTitle>
+              </DialogHeader>
+              <div className="flex-1 overflow-y-auto p-6 pt-0">{renderLeadForm(handleAddLead, 'Create Lead', createMutation.isPending)}</div>
+            </DialogContent>
+          </Dialog>
         </div>
 
         <div className="flex flex-col sm:flex-row gap-4">

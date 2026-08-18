@@ -86,7 +86,7 @@ const navItems = {
     { icon: CheckSquare, label: 'My Tasks', path: '/employee/tasks' },
     { icon: UserPlus, label: 'Leads', path: '/employee/leads' },
     // { icon: FileText, label: 'Proposals', path: '/employee/proposals' },
-    // { icon: Map, label: 'Lead Finder', path: '/employee/finder' },
+    { icon: Map, label: 'Lead Finder', path: '/employee/finder' },
     // { icon: FileText, label: 'Proposals', path: '/super-admin/proposals' },
 
     { icon: MessageSquare, label: 'Messages', path: '/employee/messages' },
